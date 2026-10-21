@@ -49,7 +49,7 @@ async function carregarStatus() {
 // ── Utilitários ──
 const $ = (s) => document.querySelector(s);
 // O github.io é o mesmo endereço para todos os portais: a chave precisa ser única.
-const CHAVE = 'radar-contabil:progresso';
+const CHAVE = 'radar-contabil:preferencias';
 
 function escapeHTML(v) {
   return String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -87,21 +87,47 @@ function baixar(nome, conteudo, tipo) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-// ── Armazenamento (fica no navegador deste computador) ──
+// ── Marcações (compartilhadas, no servidor do Quadro) ──
 // O progresso é do grupo: uma etapa marcada vale para todos os clientes dele.
-// Cliente sem grupo tem o próprio registro.
+// Cliente sem grupo tem o próprio registro. Todos veem as mesmas marcações;
+// no navegador fica só a preferência de tema.
+const API_PADRAO = 'https://wj-quadro.onrender.com/api/radar-contabil';
+const local = ['localhost', '127.0.0.1'].includes(location.hostname);
+// Para testar com um servidor local: http://localhost:8794/?api=http://127.0.0.1:8000/api/radar-contabil
+const API = (local && new URLSearchParams(location.search).get('api')) || API_PADRAO;
+const INTERVALO_ATUALIZACAO = 20000;
+
 let banco = { grupos: {}, prefs: {} };
+let gravacoesPendentes = 0;
 
 function chaveGrupo(c) { return c.grupo ? 'g:' + c.grupo : 'c:' + c.id; }
 
 try {
   const salvo = JSON.parse(localStorage.getItem(CHAVE) || 'null');
-  if (salvo && typeof salvo === 'object') banco = { grupos: salvo.grupos || {}, prefs: salvo.prefs || {} };
+  if (salvo && typeof salvo === 'object') banco.prefs = salvo.prefs || {};
 } catch (e) { /* sem armazenamento: segue só em memória */ }
 
-function salvar() {
-  try { localStorage.setItem(CHAVE, JSON.stringify(banco)); }
-  catch (e) { avisar('Não foi possível salvar neste navegador'); }
+function salvarPreferencias() {
+  try { localStorage.setItem(CHAVE, JSON.stringify({ prefs: banco.prefs })); }
+  catch (e) { /* tema só não fica lembrado */ }
+}
+
+async function carregarProgresso() {
+  const resp = await fetch(API + '/progresso', { cache: 'no-cache' });
+  if (!resp.ok) throw new Error('Servidor indisponível');
+  return (await resp.json()).grupos || {};
+}
+
+// Busca o que os outros marcaram. Não redesenha enquanto há gravação em
+// andamento ou a lista de sugestões da busca está aberta.
+async function atualizarEmSegundoPlano() {
+  if (gravacoesPendentes || document.hidden) return;
+  try {
+    const grupos = await carregarProgresso();
+    if (gravacoesPendentes || JSON.stringify(grupos) === JSON.stringify(banco.grupos)) return;
+    banco.grupos = grupos;
+    if (!$('#sugestoes').classList.contains('aberta')) atualizarTudo();
+  } catch (e) { /* tenta de novo no próximo ciclo */ }
 }
 
 function registro(id, criar) {
@@ -124,12 +150,32 @@ function proximaEtapa(id) {
   const i = ETAPAS.findIndex((_, k) => !(r && r.etapas[k]));
   return i === -1 ? null : ETAPAS[i];
 }
-function alternarEtapa(id, i, valor) {
+// A tela muda na hora; se o servidor recusar, a marcação volta ao que era.
+async function alternarEtapa(id, i) {
+  const c = porId(id);
   const r = registro(id, true);
-  const marcar = valor === undefined ? !r.etapas[i] : valor;
-  if (marcar) r.etapas[i] = r.etapas[i] || new Date().toISOString();
+  const antes = r.etapas[i];
+  const marcar = !antes;
+  if (marcar) r.etapas[i] = new Date().toISOString();
   else delete r.etapas[i];
-  salvar();
+
+  gravacoesPendentes++;
+  try {
+    const resp = await fetch(API + '/marcacao', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ grupo: chaveGrupo(c), etapa: i, feito: marcar }),
+    });
+    if (!resp.ok) throw new Error();
+    const dados = await resp.json();
+    if (marcar && dados.feitoEm) r.etapas[i] = dados.feitoEm;
+  } catch (e) {
+    if (antes) r.etapas[i] = antes; else delete r.etapas[i];
+    avisar('Não foi possível salvar a marcação. Tente de novo.');
+  } finally {
+    gravacoesPendentes--;
+    atualizarTudo();
+  }
 }
 
 // ── Rosca ──
@@ -473,14 +519,6 @@ $('#menu-dados .menu-lista').addEventListener('click', (e) => {
   $('#menu-dados').classList.remove('aberto');
   if (acao === 'csv') exportarCSV();
   else if (acao === 'imprimir') window.print();
-  else if (acao === 'limpar') {
-    if (confirm('Apagar todas as marcações de todos os grupos? Essa ação não pode ser desfeita.')) {
-      banco.grupos = {};
-      salvar();
-      atualizarTudo();
-      avisar('Marcações apagadas');
-    }
-  }
 });
 function aplicarTema(tema) {
   document.documentElement.dataset.tema = tema;
@@ -489,7 +527,7 @@ function aplicarTema(tema) {
 $('#btn-tema').addEventListener('click', () => {
   banco.prefs.tema = document.documentElement.dataset.tema === 'escuro' ? 'claro' : 'escuro';
   aplicarTema(banco.prefs.tema);
-  salvar();
+  salvarPreferencias();
 });
 
 // Placares: filtros, abas, ordenação e clique na linha
@@ -584,22 +622,25 @@ $('#btn-proximo').addEventListener('click', () => {
   if (i < lista.length - 1) abrirCliente(lista[i + 1].id);
 });
 
-// Outra aba aberta com o mesmo arquivo: mantém as duas iguais.
-window.addEventListener('storage', (e) => {
-  if (e.key !== CHAVE || !e.newValue) return;
-  try { banco = JSON.parse(e.newValue); atualizarTudo(); } catch (err) { /* ignora */ }
-});
-
 // ── Início ──
 aplicarTema(banco.prefs.tema === 'escuro' ? 'escuro' : 'claro');
 carregarStatus();
-carregarDados()
-  .then(() => {
+// O servidor gratuito dorme sem uso; o primeiro acesso do dia demora a acordar.
+const avisoDemora = setTimeout(() => {
+  $('#carregando').textContent = 'Conectando ao servidor. O primeiro acesso do dia pode levar até um minuto.';
+}, 4000);
+Promise.all([carregarDados(), carregarProgresso()])
+  .then(([, grupos]) => {
+    clearTimeout(avisoDemora);
+    banco.grupos = grupos;
     $('#carregando').hidden = true;
     preencherFiltros();
     lerEndereco();
+    setInterval(atualizarEmSegundoPlano, INTERVALO_ATUALIZACAO);
+    document.addEventListener('visibilitychange', atualizarEmSegundoPlano);
   })
   .catch(() => {
-    $('#carregando').textContent = 'Não foi possível carregar a base de clientes.';
+    clearTimeout(avisoDemora);
+    $('#carregando').textContent = 'Não foi possível carregar os dados. Atualize a página para tentar de novo.';
     $('#carregando').classList.add('erro');
   });

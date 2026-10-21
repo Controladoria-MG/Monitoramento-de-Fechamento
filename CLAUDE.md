@@ -46,17 +46,26 @@ Raiz/
 - `atualizar_base.py`: copia a planilha para `data/radar_contabil/resumo.xlsx`, confere as abas e grava `status.json`. Com `--publicar`, faz commit e push só desses dois arquivos.
 - Funciona com a planilha aberta no Excel: o Python não abre o arquivo travado, então a cópia é feita pelo `Copy-Item` do PowerShell.
 
+### Marcações (compartilhadas)
+- As etapas marcadas ficam no **servidor do Quadro** (WJ-Quadro, Render), tabela `radar_contabil_etapas` (grupo, etapa, feito_em), para todos verem o mesmo progresso.
+- API (`API_PADRAO` no `script.js`): `GET https://wj-quadro.onrender.com/api/radar-contabil/progresso` devolve `{grupos: {"g:<grupo>": {etapas: {"0": iso, ...}}}}`; `PUT .../marcacao` com `{grupo, etapa, feito}` marca ou desmarca. O código das rotas está no `backend/main.py` do repositório WJ-Quadro, seção "ROTAS — RADAR CONTÁBIL".
+- O clique muda a tela na hora e grava em seguida; se o servidor recusar, a marcação volta e aparece um aviso. A cada 20 s a tela busca o que os outros marcaram (`atualizarEmSegundoPlano`).
+- Não há login: qualquer pessoa com o endereço marca e desmarca. Por isso não existe "limpar todas as marcações".
+- No navegador (`localStorage`, chave `radar-contabil:preferencias`) fica só o tema.
+- Para testar com um Quadro local: `http://localhost:8794/?api=http://127.0.0.1:8000/api/radar-contabil` (o parâmetro `api` só vale em localhost).
+
 ## Regras de negócio
 
 - **O progresso é do grupo, não do cliente.** Uma etapa marcada vale para todos os clientes do mesmo `Grupo` (`chaveGrupo()`). Cliente sem grupo tem o próprio registro.
 - Situação do cliente: nenhuma etapa = Não iniciado; todas = Concluído; o resto = Em andamento. As abas da tabela e os placares usam a mesma `statusDe()`.
 - "Etapa atual" na tabela é a primeira etapa ainda não marcada.
-- Não existe competência (mês). As marcações valem até alguém desmarcar ou usar "Limpar todas as marcações".
+- Não existe competência (mês). As marcações valem até alguém desmarcar.
 
 ## Armadilhas
 
-- **As marcações ficam no `localStorage` do navegador**, na chave `radar-contabil:progresso`. Cada pessoa e cada computador tem o seu progresso; nada é compartilhado. Para a equipe ver o mesmo progresso é preciso um servidor com banco.
+- **O Render gratuito dorme sem uso.** O primeiro acesso do dia pode levar até um minuto; a tela mostra "Conectando ao servidor..." depois de 4 s.
 - O `github.io` é o mesmo endereço para todos os portais da Controladoria-MG, então o `localStorage` é compartilhado entre eles: a chave precisa continuar única.
+- A chave do grupo é `"g:" + Grupo` da planilha. **Renomear um grupo na planilha faz ele perder as marcações** (passa a ser outra chave).
 - As marcações são guardadas pela **posição** da etapa, não pelo nome. Renomear uma etapa mantém a marcação; reordenar ou inserir etapas no meio faz as marcações existentes apontarem para outra etapa.
 
 ## Como rodar

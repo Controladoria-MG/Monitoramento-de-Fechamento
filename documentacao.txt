@@ -33,7 +33,13 @@ REGRAS
 - As etapas marcadas valem para o grupo inteiro: se um cliente do grupo fez,
   todos fizeram.
 - Não iniciado = nenhuma etapa; Concluído = todas; Em andamento = o resto.
-- As marcações ficam no navegador de quem usa (localStorage), por pessoa e
-  por computador. Não são compartilhadas entre a equipe.
+- As marcações são compartilhadas: ficam no servidor do Quadro
+  (wj-quadro.onrender.com, tabela radar_contabil_etapas) e todos veem o
+  mesmo progresso. A tela busca as marcações dos outros a cada 20 segundos.
+- Não há login: qualquer pessoa com o endereço marca e desmarca.
+- O servidor gratuito dorme sem uso; o primeiro acesso do dia pode levar
+  até um minuto.
 - As marcações são guardadas pela posição da etapa: inserir ou reordenar
   etapas no meio da lista desloca as marcações existentes.
+- As marcações são guardadas pelo nome do grupo: renomear um grupo na
+  planilha faz ele perder as marcações.
