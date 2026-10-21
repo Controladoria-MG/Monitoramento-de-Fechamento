@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-tema="claro">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Radar Contábil</title>
+  <link rel="icon" href="static/logo.png">
+  <link rel="stylesheet" href="static/style.css">
+</head>
+<body>
+<header class="topo">
+  <div class="marca">
+    <img class="marca-logo" alt="MG Contabilidade" src="static/logo.png">
+    <div>
+      <div class="marca-nome">Radar Contábil</div>
+      <div class="marca-sub" id="status-execucao">Carregando...</div>
+    </div>
+  </div>
+  <button class="btn-topo forte" id="btn-ir-tratamento">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+    Checklist
+  </button>
+  <button class="btn-topo forte" id="btn-ir-inicio" hidden>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
+    Placares
+  </button>
+  <button class="btn-topo" id="btn-tema" type="button">Alterar tema para Escuro</button>
+  <div class="menu" id="menu-dados">
+    <button class="btn-topo btn-icone" id="btn-menu" title="Mais opções" aria-label="Mais opções">
+      <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
+    </button>
+    <div class="menu-lista">
+      <button data-acao="csv">Exportar planilha</button>
+      <button data-acao="imprimir">Imprimir</button>
+      <div class="menu-sep"></div>
+      <button data-acao="limpar">Limpar todas as marcações</button>
+    </div>
+  </div>
+</header>
+
+<!-- ── Placares ── -->
+<main class="tela" id="tela-inicio">
+  <div class="titulo-tela">
+    <h1>Placares</h1>
+    <span class="sub" id="sub-inicio"></span>
+  </div>
+
+  <section class="kpis">
+    <div class="kpi kpi-principal">
+      <div class="rosca rosca-pequena" id="rosca-total"></div>
+      <div>
+        <div class="campo-rotulo">Total concluído</div>
+        <div class="kpi-valor" id="kpi-total">0%</div>
+        <div class="kpi-sub" id="kpi-total-sub"></div>
+      </div>
+    </div>
+    <div class="kpi kpi-clicavel" data-status="concluido">
+      <div class="campo-rotulo">Clientes concluídos</div>
+      <div class="kpi-valor" id="kpi-concluidos">0</div>
+      <div class="kpi-sub" id="kpi-concluidos-sub"></div>
+    </div>
+    <div class="kpi kpi-clicavel" data-status="andamento">
+      <div class="campo-rotulo">Em andamento</div>
+      <div class="kpi-valor" id="kpi-andamento">0</div>
+      <div class="kpi-sub">com ao menos uma etapa feita</div>
+    </div>
+    <div class="kpi kpi-clicavel alerta" data-status="pendente">
+      <div class="campo-rotulo">Não iniciados</div>
+      <div class="kpi-valor" id="kpi-pendentes">0</div>
+      <div class="kpi-sub">nenhuma etapa marcada</div>
+    </div>
+  </section>
+
+  <section class="grade">
+    <div class="cartao">
+      <div class="cartao-titulo"><h2>Por coordenação</h2><span>clique para filtrar</span></div>
+      <div class="barras" id="barras-coordenacao"></div>
+    </div>
+    <div class="cartao">
+      <div class="cartao-titulo"><h2>Por tributação</h2><span>clique para filtrar</span></div>
+      <div class="barras" id="barras-regime"></div>
+    </div>
+    <div class="cartao">
+      <div class="cartao-titulo"><h2>Por etapa</h2><span>clientes que concluíram</span></div>
+      <div class="barras" id="barras-etapa"></div>
+    </div>
+  </section>
+
+  <section class="cartao tabela-cartao">
+    <div class="tabela-abas" id="tabela-abas">
+      <button class="tabela-aba" data-status="">Todos <b></b></button>
+      <button class="tabela-aba" data-status="pendente">Não iniciados <b></b></button>
+      <button class="tabela-aba" data-status="andamento">Em andamento <b></b></button>
+      <button class="tabela-aba" data-status="concluido">Clientes concluídos <b></b></button>
+    </div>
+    <div class="filtros">
+      <input class="input" id="f-busca" placeholder="Buscar por cliente, código ou grupo">
+      <select class="select" id="f-coordenacao"></select>
+      <select class="select" id="f-regime"></select>
+      <select class="select" id="f-grupo"></select>
+      <select class="select" id="f-responsavel"></select>
+      <button class="btn" id="f-limpar">Limpar filtros</button>
+      <span class="contagem" id="f-contagem"></span>
+    </div>
+    <div class="tabela-caixa">
+      <table>
+        <thead>
+          <tr>
+            <th data-ordem="id">Código</th>
+            <th data-ordem="nome">Cliente</th>
+            <th data-ordem="grupo">Grupo</th>
+            <th data-ordem="coordenacao">Coordenação</th>
+            <th data-ordem="responsavel">Responsável</th>
+            <th data-ordem="regime">Tributação</th>
+            <th data-ordem="pct">Progresso</th>
+            <th data-ordem="proxima">Etapa atual</th>
+          </tr>
+        </thead>
+        <tbody id="tabela-corpo"></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<!-- ── Checklist ── -->
+<main class="tela" id="tela-tratamento">
+  <div class="titulo-tela">
+    <div class="busca-cliente">
+      <input class="input" id="busca-cliente" autocomplete="off" placeholder="Digite o nome ou o código do cliente">
+      <div class="sugestoes" id="sugestoes"></div>
+    </div>
+    <div class="nav-cliente" id="nav-cliente" hidden>
+      <button class="btn" id="btn-anterior" title="Cliente anterior do grupo">Anterior</button>
+      <button class="btn" id="btn-proximo" title="Próximo cliente do grupo">Próximo</button>
+    </div>
+  </div>
+
+  <div id="trat-vazio" class="estado-vazio">
+    <h2>Selecione um cliente</h2>
+  </div>
+
+  <div class="trat-layout" id="trat-conteudo" hidden>
+    <div class="trat-principal">
+      <section class="cartao painel-rosca">
+        <div class="rosca" id="rosca-cliente"></div>
+        <div>
+          <div class="cli-nome" id="cli-nome"></div>
+          <div class="cli-linha" id="cli-linha"></div>
+          <dl class="cli-info" id="cli-info"></dl>
+        </div>
+      </section>
+
+      <section class="cartao">
+        <div class="cartao-titulo"><h2>Etapas de fechamento</h2><span id="etapas-resumo"></span></div>
+        <div class="checklist" id="checklist"></div>
+        <p class="dica" id="dica-grupo"></p>
+      </section>
+    </div>
+
+    <aside class="cartao">
+      <div class="cartao-titulo"><h2 id="grupo-titulo">Clientes do grupo</h2><span id="grupo-resumo"></span></div>
+      <div class="grupo-lista" id="grupo-lista"></div>
+    </aside>
+  </div>
+</main>
+
+<div class="aviso" id="aviso"></div>
+
+<div class="carregando" id="carregando">Carregando dados...</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="static/script.js"></script>
+</body>
+</html>

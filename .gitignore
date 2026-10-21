@@ -1,0 +1,14 @@
+.env
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.log
+.DS_Store
+
+data/radar_contabil/*.xlsx
+# ...exceto a planilha única que o portal lê (fetch + SheetJS).
+!data/radar_contabil/resumo.xlsx
+
+# O script de atualização roda só localmente, como nos outros portais.
+backend/

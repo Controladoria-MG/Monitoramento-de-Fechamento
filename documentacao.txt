@@ -1,0 +1,39 @@
+RADAR CONTÁBIL — documentação técnica
+======================================
+
+O QUE É
+-------
+Checklist das etapas de fechamento contábil por cliente. Página inicial com
+placares (total concluído, por coordenação, por tributação, por etapa) e a
+tabela de clientes com abas Não iniciados / Em andamento / Clientes concluídos.
+A tela "Checklist" abre um cliente pelo código ou nome e mostra as etapas com
+uma rosca que preenche a cada etapa marcada.
+
+Endereço: https://controladoria-mg.github.io/Radar-Contabil/
+
+ORIGEM DOS DADOS
+----------------
+Planilha de controle: python/Resumo da utilização da Conciliação 2.xlsx
+  - aba "Clientes": um cliente por linha (ID, CodMatriz, RazaoSocial, Grupo,
+    Gerente, Master, Regime, Segmento, Responsável, Coordenação, Departamento).
+  - aba "etapas": as etapas do checklist, uma por linha, a partir da linha 2.
+
+backend/atualizar_base.py copia essa planilha para
+data/radar_contabil/resumo.xlsx e grava status.json. O portal lê o
+resumo.xlsx com SheetJS no navegador.
+
+ATUALIZAR A BASE
+----------------
+1. Edite a planilha de controle (pode deixar aberta no Excel).
+2. python backend/atualizar_base.py --publicar
+3. O GitHub Pages publica em cerca de 1 minuto.
+
+REGRAS
+------
+- As etapas marcadas valem para o grupo inteiro: se um cliente do grupo fez,
+  todos fizeram.
+- Não iniciado = nenhuma etapa; Concluído = todas; Em andamento = o resto.
+- As marcações ficam no navegador de quem usa (localStorage), por pessoa e
+  por computador. Não são compartilhadas entre a equipe.
+- As marcações são guardadas pela posição da etapa: inserir ou reordenar
+  etapas no meio da lista desloca as marcações existentes.
