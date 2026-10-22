@@ -258,6 +258,12 @@ td.num { font-variant-numeric: tabular-nums; color: var(--cinza-texto); }
 .etapa.feita .etapa-caixa { background: var(--mg-vermelho); border-color: var(--mg-vermelho); }
 .etapa.feita .etapa-caixa svg { opacity: 1; transform: scale(1); }
 .etapa.feita .etapa-num { color: var(--mg-vermelho); }
+.etapa-nome small { display: block; font-size: 0.75rem; font-weight: 400; color: var(--cinza-muted); margin-top: 1px; }
+/* "Empresa sem movimento" fica separada das etapas de trabalho */
+.etapa.sem-movimento { margin-bottom: 8px; }
+/* Com a empresa sem movimento, as demais ficam travadas */
+.etapa.fechada { opacity: 0.45; cursor: not-allowed; }
+.etapa.fechada:hover { border-color: var(--borda); }
 .dica { font-size: 0.75rem; color: var(--cinza-muted); margin-top: 10px; }
 
 

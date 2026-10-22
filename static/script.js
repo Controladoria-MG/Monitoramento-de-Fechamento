@@ -1,10 +1,32 @@
 // ── Dados ──
-// A base vem de data/radar_contabil/resumo.xlsx (aba "Clientes" e aba "etapas"),
+// A base de clientes vem de data/radar_contabil/resumo.xlsx (aba "Clientes"),
 // lida no navegador com SheetJS, igual aos outros portais.
 const ARQUIVO_DADOS = 'data/radar_contabil/resumo.xlsx';
 const ARQUIVO_STATUS = 'data/radar_contabil/status.json';
-let ETAPAS = [];
 let CLIENTES = [];
+
+// Etapas do checklist, na ordem da tela. O código é o que vai para o servidor:
+// nunca reaproveite nem mude o código de uma etapa (as marcações dependem dele).
+// Os códigos 0 a 5 foram da primeira versão e não devem ser usados.
+//  - semMovimento: conclui o cliente e trava as demais etapas.
+//  - parcial: marcar esta etapa marca junto a parcial dela;
+//    desmarcar a parcial desmarca esta.
+const ETAPAS = [
+  { codigo: 10, nome: 'Empresa sem movimento', semMovimento: true },
+  { codigo: 11, nome: 'Recebimento da documentação contábil 100%', parcial: 12 },
+  { codigo: 12, nome: 'Recebimento da documentação contábil 80%', detalhe: 'Já é possível realizar o fechamento' },
+  { codigo: 13, nome: 'Conciliação da folha' },
+  { codigo: 14, nome: 'Conciliação do resumo fiscal 100%', parcial: 15 },
+  { codigo: 15, nome: 'Conciliação do fiscal 60% (ICMS)', detalhe: 'Falta PIS/Cofins' },
+  { codigo: 16, nome: 'Conciliação financeira 100%', parcial: 17 },
+  { codigo: 17, nome: 'Conciliação financeira 85/90%', detalhe: 'Já é possível enviar uma prévia' },
+  { codigo: 18, nome: 'Fechamento liberado' },
+];
+const ETAPA_SEM_MOVIMENTO = ETAPAS.find((e) => e.semMovimento);
+// As que contam no progresso (todas menos "sem movimento").
+const ETAPAS_TRABALHO = ETAPAS.filter((e) => !e.semMovimento);
+const TOTAL_ETAPAS = ETAPAS_TRABALHO.length;
+const porCodigo = (codigo) => ETAPAS.find((e) => e.codigo === codigo);
 
 // Coluna da planilha -> campo usado no portal
 const CAMPOS = {
@@ -30,9 +52,6 @@ async function carregarDados() {
       return c;
     })
     .filter((c) => c.id !== '' && c.id !== undefined);
-
-  ETAPAS = XLSX.utils.sheet_to_json(wb.Sheets.etapas, { header: 1 })
-    .slice(1).map((l) => String(l[0] ?? '').trim()).filter(Boolean);
 }
 
 async function carregarStatus() {
@@ -137,40 +156,64 @@ function registro(id, criar) {
   if (!banco.grupos[k] && criar) banco.grupos[k] = { etapas: {} };
   return banco.grupos[k] || null;
 }
+function marcada(id, etapa) { return !!registro(id, false)?.etapas[etapa.codigo]; }
+function semMovimento(id) { return marcada(id, ETAPA_SEM_MOVIMENTO); }
+// Empresa sem movimento conta como todas as etapas feitas.
 function feitasDe(id) {
-  const r = registro(id, false);
-  return r ? ETAPAS.filter((_, i) => r.etapas[i]).length : 0;
+  if (semMovimento(id)) return TOTAL_ETAPAS;
+  return ETAPAS_TRABALHO.filter((e) => marcada(id, e)).length;
 }
 function statusDe(id) {
   const f = feitasDe(id);
-  return f === 0 ? 'pendente' : f === ETAPAS.length ? 'concluido' : 'andamento';
+  return f === 0 ? 'pendente' : f === TOTAL_ETAPAS ? 'concluido' : 'andamento';
 }
 function proximaEtapa(id) {
-  const r = registro(id, false);
-  const i = ETAPAS.findIndex((_, k) => !(r && r.etapas[k]));
-  return i === -1 ? null : ETAPAS[i];
+  if (semMovimento(id)) return null;
+  return ETAPAS_TRABALHO.find((e) => !marcada(id, e)) || null;
 }
-// A tela muda na hora; se o servidor recusar, a marcação volta ao que era.
-async function alternarEtapa(id, i) {
+
+// Etapas que mudam junto com um clique: a de 100% leva a parcial ao ser
+// marcada; a parcial leva a de 100% ao ser desmarcada.
+function etapasAfetadas(id, etapa, marcar) {
+  const lista = [etapa];
+  if (marcar && etapa.parcial && !marcada(id, porCodigo(etapa.parcial))) lista.push(porCodigo(etapa.parcial));
+  if (!marcar) {
+    const completa = ETAPAS.find((e) => e.parcial === etapa.codigo);
+    if (completa && marcada(id, completa)) lista.push(completa);
+  }
+  return lista;
+}
+
+// A tela muda na hora; se o servidor recusar, as marcações voltam ao que eram.
+async function alternarEtapa(id, codigo) {
+  const etapa = porCodigo(codigo);
+  if (!etapa || (!etapa.semMovimento && semMovimento(id))) return;
   const c = porId(id);
   const r = registro(id, true);
-  const antes = r.etapas[i];
-  const marcar = !antes;
-  if (marcar) r.etapas[i] = new Date().toISOString();
-  else delete r.etapas[i];
+  const marcar = !r.etapas[codigo];
+  const afetadas = etapasAfetadas(id, etapa, marcar);
+  const antes = Object.fromEntries(afetadas.map((e) => [e.codigo, r.etapas[e.codigo]]));
+  for (const e of afetadas) {
+    if (marcar) r.etapas[e.codigo] = new Date().toISOString();
+    else delete r.etapas[e.codigo];
+  }
 
   gravacoesPendentes++;
   try {
-    const resp = await fetch(API + '/marcacao', {
+    const respostas = await Promise.all(afetadas.map((e) => fetch(API + '/marcacao', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ grupo: chaveGrupo(c), etapa: i, feito: marcar }),
-    });
-    if (!resp.ok) throw new Error();
-    const dados = await resp.json();
-    if (marcar && dados.feitoEm) r.etapas[i] = dados.feitoEm;
+      body: JSON.stringify({ grupo: chaveGrupo(c), etapa: e.codigo, feito: marcar }),
+    })));
+    if (respostas.some((resp) => !resp.ok)) throw new Error();
+    for (const resp of respostas) {
+      const dados = await resp.json();
+      if (marcar && dados.feitoEm) r.etapas[dados.etapa] = dados.feitoEm;
+    }
   } catch (e) {
-    if (antes) r.etapas[i] = antes; else delete r.etapas[i];
+    for (const [k, v] of Object.entries(antes)) {
+      if (v) r.etapas[k] = v; else delete r.etapas[k];
+    }
     avisar('Não foi possível salvar a marcação. Tente de novo.');
   } finally {
     gravacoesPendentes--;
@@ -237,11 +280,11 @@ function agrupar(chave, rotulo = (v) => v || 'Não informado') {
     const g = mapa.get(k) || { valor: k, nome: rotulo(k), clientes: 0, feitas: 0, concluidos: 0 };
     const f = feitasDe(c.id);
     g.clientes++; g.feitas += f;
-    if (f === ETAPAS.length) g.concluidos++;
+    if (f === TOTAL_ETAPAS) g.concluidos++;
     mapa.set(k, g);
   }
   return [...mapa.values()]
-    .map((g) => ({ ...g, pct: pct(g.feitas, g.clientes * ETAPAS.length) }))
+    .map((g) => ({ ...g, pct: pct(g.feitas, g.clientes * TOTAL_ETAPAS) }))
     .sort((a, b) => b.pct - a.pct || a.nome.localeCompare(b.nome));
 }
 
@@ -256,12 +299,12 @@ function htmlBarra(nome, detalhe, valor, filtro, ativo) {
 }
 
 function renderInicio() {
-  const total = CLIENTES.length * ETAPAS.length;
+  const total = CLIENTES.length * TOTAL_ETAPAS;
   let feitas = 0, concl = 0, andam = 0, pend = 0;
   for (const c of CLIENTES) {
     const f = feitasDe(c.id);
     feitas += f;
-    if (f === 0) pend++; else if (f === ETAPAS.length) concl++; else andam++;
+    if (f === 0) pend++; else if (f === TOTAL_ETAPAS) concl++; else andam++;
   }
   const geral = pct(feitas, total);
   const grupos = new Set(CLIENTES.map(chaveGrupo)).size;
@@ -280,9 +323,10 @@ function renderInicio() {
     .map((g) => htmlBarra(g.nome, detalheGrupo(g), g.pct, ['coordenacao', g.valor], filtros.coordenacao === g.valor)).join('');
   $('#barras-regime').innerHTML = agrupar('regime', rotuloRegime)
     .map((g) => htmlBarra(g.nome, detalheGrupo(g), g.pct, ['regime', g.valor], filtros.regime === g.valor)).join('');
-  $('#barras-etapa').innerHTML = ETAPAS.map((e, i) => {
-    const n = CLIENTES.filter((c) => registro(c.id, false)?.etapas[i]).length;
-    return htmlBarra(e, `${n} de ${CLIENTES.length}`, pct(n, CLIENTES.length), null, false);
+  // Empresa sem movimento conta como feita em todas as etapas.
+  $('#barras-etapa').innerHTML = ETAPAS.map((e) => {
+    const n = CLIENTES.filter((c) => marcada(c.id, e) || (!e.semMovimento && semMovimento(c.id))).length;
+    return htmlBarra(e.nome, `${n} de ${CLIENTES.length}`, pct(n, CLIENTES.length), null, false);
   }).join('');
 
   renderTabela();
@@ -346,7 +390,10 @@ function renderTabela() {
     return;
   }
   $('#tabela-corpo').innerHTML = lista.map((c) => {
-    const f = feitasDe(c.id), p = pct(f, ETAPAS.length), st = statusDe(c.id), prox = proximaEtapa(c.id);
+    const f = feitasDe(c.id), p = pct(f, TOTAL_ETAPAS), st = statusDe(c.id), prox = proximaEtapa(c.id);
+    const etapaAtual = semMovimento(c.id)
+      ? `<span class="etiqueta etq-concluido">Sem movimento</span>`
+      : prox ? escapeHTML(prox.nome) : `<span class="etiqueta etq-concluido">${ROTULO_STATUS.concluido}</span>`;
     return `<tr data-id="${escapeHTML(c.id)}">
       <td class="num">${escapeHTML(c.id)}</td>
       <td class="cel-cliente">${escapeHTML(c.nome)}${c.matriz ? `<small>Filial da matriz ${escapeHTML(c.matriz)}</small>` : ''}</td>
@@ -355,7 +402,7 @@ function renderTabela() {
       <td>${escapeHTML(c.responsavel)}</td>
       <td>${escapeHTML(rotuloRegime(c.regime))}</td>
       <td><div class="mini-progresso"><span class="barra-trilha"><span class="barra-cheia" style="width:${p}%"></span></span><b>${p}%</b></div></td>
-      <td>${prox ? escapeHTML(prox) : `<span class="etiqueta etq-concluido">${ROTULO_STATUS.concluido}</span>`}${st === 'pendente' ? ` <span class="etiqueta etq-pendente">${ROTULO_STATUS.pendente}</span>` : ''}</td>
+      <td>${etapaAtual}${st === 'pendente' ? ` <span class="etiqueta etq-pendente">${ROTULO_STATUS.pendente}</span>` : ''}</td>
     </tr>`;
   }).join('');
 }
@@ -394,7 +441,7 @@ function renderSugestoes() {
   sugestaoMarcada = Math.min(Math.max(sugestaoMarcada, 0), lista.length - 1);
   caixa.innerHTML = lista.map((c, i) =>
     `<button class="sugestao${i === sugestaoMarcada ? ' marcada' : ''}" data-id="${escapeHTML(c.id)}">
-      <span>${escapeHTML(rotuloCliente(c))}</span><small>${escapeHTML(c.grupo)} · ${pct(feitasDe(c.id), ETAPAS.length)}%</small>
+      <span>${escapeHTML(rotuloCliente(c))}</span><small>${escapeHTML(c.grupo)} · ${pct(feitasDe(c.id), TOTAL_ETAPAS)}%</small>
     </button>`).join('');
   caixa.classList.add('aberta');
 }
@@ -418,7 +465,9 @@ function renderTratamento() {
   if (!c) return;
   const r = registro(c.id, false);
   const feitas = feitasDe(c.id);
-  desenharRosca($('#rosca-cliente'), feitas, ETAPAS.length);
+  const parado = semMovimento(c.id);
+  desenharRosca($('#rosca-cliente'), feitas, TOTAL_ETAPAS);
+  if (parado) $('#rosca-cliente .rosca-sub').textContent = 'Empresa sem movimento';
 
   $('#cli-nome').textContent = c.nome;
   $('#cli-linha').textContent = `Código ${c.id}${c.matriz ? ` · filial da matriz ${c.matriz}` : ' · matriz'}`;
@@ -430,19 +479,22 @@ function renderTratamento() {
   $('#cli-info').innerHTML = info.filter(([, v]) => v)
     .map(([k, v]) => `<div><dt>${escapeHTML(k)}</dt><dd title="${escapeHTML(v)}">${escapeHTML(v)}</dd></div>`).join('');
 
-  $('#etapas-resumo').textContent = feitas === ETAPAS.length ? 'Todas concluídas' : `${plural(ETAPAS.length - feitas, 'etapa pendente', 'etapas pendentes')}`;
+  $('#etapas-resumo').textContent = parado ? 'Empresa sem movimento'
+    : feitas === TOTAL_ETAPAS ? 'Todas concluídas' : plural(TOTAL_ETAPAS - feitas, 'etapa pendente', 'etapas pendentes');
   $('#checklist').innerHTML = ETAPAS.map((e, i) => {
-    const quando = r?.etapas[i];
-    return `<button class="etapa${quando ? ' feita' : ''}" data-etapa="${i}" aria-pressed="${!!quando}">
+    const quando = r?.etapas[e.codigo];
+    const fechada = parado && !e.semMovimento;
+    const classes = ['etapa', quando ? 'feita' : '', fechada ? 'fechada' : '', e.semMovimento ? 'sem-movimento' : ''].filter(Boolean).join(' ');
+    return `<button class="${classes}" data-etapa="${e.codigo}" aria-pressed="${!!quando}"${fechada ? ' disabled' : ''}>
       <span class="etapa-num">${i + 1}</span>
       <span class="etapa-caixa"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg></span>
-      <span class="etapa-nome">${escapeHTML(e)}</span>
+      <span class="etapa-nome">${escapeHTML(e.nome)}${e.detalhe ? `<small>${escapeHTML(e.detalhe)}</small>` : ''}</span>
       <span class="etapa-quando">${quando ? 'Concluída em ' + formatarQuando(quando) : ''}</span>
     </button>`;
   }).join('');
   const qtdGrupo = clientesDoGrupo(c).length;
   $('#dica-grupo').textContent = (qtdGrupo > 1 ? `As etapas valem para os ${qtdGrupo} clientes do grupo ${c.grupo}. ` : '') +
-    'Atalho: teclas 1 a 6 marcam e desmarcam as etapas.';
+    `Atalho: teclas 1 a ${ETAPAS.length} marcam e desmarcam as etapas.`;
 
   renderGrupo();
 }
@@ -451,7 +503,7 @@ function renderGrupo() {
   const c = clienteAtual;
   const lista = clientesDoGrupo(c);
   $('#grupo-titulo').textContent = c.grupo ? `Grupo ${c.grupo}` : 'Clientes do grupo';
-  $('#grupo-resumo').textContent = `${plural(lista.length, 'cliente', 'clientes')} · ${pct(feitasDe(c.id), ETAPAS.length)}%`;
+  $('#grupo-resumo').textContent = `${plural(lista.length, 'cliente', 'clientes')} · ${pct(feitasDe(c.id), TOTAL_ETAPAS)}%`;
   $('#grupo-lista').innerHTML = lista.map((x) =>
     `<button class="grupo-item${x.id === c.id ? ' atual' : ''}" data-abrir="${escapeHTML(x.id)}">
       <span class="nome" title="${escapeHTML(rotuloCliente(x))}">${escapeHTML(rotuloCliente(x))}<small>${x.matriz ? 'filial' : 'matriz'}</small></span>
@@ -487,13 +539,13 @@ function irPara(hash) {
 
 // ── Exportar ──
 function exportarCSV() {
-  const cab = ['Código', 'Cliente', 'Grupo', 'Coordenação', 'Responsável', 'Tributação', ...ETAPAS, '% concluído', 'Situação'];
+  const cab = ['Código', 'Cliente', 'Grupo', 'Coordenação', 'Responsável', 'Tributação', ...ETAPAS.map((e) => e.nome), '% concluído', 'Situação'];
   const cel = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
   const linhas = CLIENTES.map((c) => {
     const r = registro(c.id, false);
     return [c.id, c.nome, c.grupo, c.coordenacao, c.responsavel, rotuloRegime(c.regime),
-      ...ETAPAS.map((_, i) => (r?.etapas[i] ? formatarQuando(r.etapas[i]).replace(' às ', ' ') : '')),
-      pct(feitasDe(c.id), ETAPAS.length) + '%', ROTULO_STATUS[statusDe(c.id)]].map(cel).join(';');
+      ...ETAPAS.map((e) => (r?.etapas[e.codigo] ? formatarQuando(r.etapas[e.codigo]).replace(' às ', ' ') : '')),
+      pct(feitasDe(c.id), TOTAL_ETAPAS) + '%', semMovimento(c.id) ? 'Sem movimento' : ROTULO_STATUS[statusDe(c.id)]].map(cel).join(';');
   });
   const hoje = new Date().toLocaleDateString('sv-SE');
   baixar(`radar-contabil-${hoje}.csv`, '﻿' + [cab.map(cel).join(';'), ...linhas].join('\r\n'), 'text/csv;charset=utf-8');
@@ -602,14 +654,14 @@ $('#checklist').addEventListener('click', (e) => {
   if (!b || !clienteAtual) return;
   alternarEtapa(clienteAtual.id, Number(b.dataset.etapa));
   renderTratamento();
-  if (feitasDe(clienteAtual.id) === ETAPAS.length) avisar(clienteAtual.grupo ? `Grupo ${clienteAtual.grupo} concluído` : 'Cliente concluído');
+  if (statusDe(clienteAtual.id) === 'concluido') avisar(clienteAtual.grupo ? `Grupo ${clienteAtual.grupo} concluído` : 'Cliente concluído');
 });
 document.addEventListener('keydown', (e) => {
   if (!clienteAtual || !$('#tela-tratamento').classList.contains('visivel')) return;
   if (e.target.closest('input, textarea, select') || e.ctrlKey || e.metaKey || e.altKey) return;
   const n = Number(e.key);
   if (n >= 1 && n <= ETAPAS.length) {
-    alternarEtapa(clienteAtual.id, n - 1);
+    alternarEtapa(clienteAtual.id, ETAPAS[n - 1].codigo);
     renderTratamento();
   }
 });

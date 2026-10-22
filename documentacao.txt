@@ -16,7 +16,23 @@ ORIGEM DOS DADOS
 Planilha de controle: python/Resumo da utilização da Conciliação 2.xlsx
   - aba "Clientes": um cliente por linha (ID, CodMatriz, RazaoSocial, Grupo,
     Gerente, Master, Regime, Segmento, Responsável, Coordenação, Departamento).
-  - aba "etapas": as etapas do checklist, uma por linha, a partir da linha 2.
+  - a aba "etapas" não é mais usada: as etapas ficam fixas no portal
+    (static/script.js, lista ETAPAS).
+
+ETAPAS DO CHECKLIST
+-------------------
+ 1. Empresa sem movimento: conclui o cliente e trava as demais etapas.
+ 2. Recebimento da documentação contábil 100%
+ 3. Recebimento da documentação contábil 80% (já é possível realizar o fechamento)
+ 4. Conciliação da folha
+ 5. Conciliação do resumo fiscal 100%
+ 6. Conciliação do fiscal 60% - ICMS (falta PIS/Cofins)
+ 7. Conciliação financeira 100%
+ 8. Conciliação financeira 85/90% (já é possível enviar uma prévia)
+ 9. Fechamento liberado
+
+Marcar uma etapa de 100% marca junto a parcial dela (80%, 60% ou 85/90%);
+desmarcar a parcial desmarca a de 100%. O progresso conta as etapas 2 a 9.
 
 backend/atualizar_base.py copia essa planilha para
 data/radar_contabil/resumo.xlsx e grava status.json. O portal lê o
@@ -32,14 +48,15 @@ REGRAS
 ------
 - As etapas marcadas valem para o grupo inteiro: se um cliente do grupo fez,
   todos fizeram.
-- Não iniciado = nenhuma etapa; Concluído = todas; Em andamento = o resto.
+- Não iniciado = nenhuma etapa; Concluído = etapas 2 a 9 ou empresa sem
+  movimento; Em andamento = o resto.
 - As marcações são compartilhadas: ficam no servidor do Quadro
   (wj-quadro.onrender.com, tabela radar_contabil_etapas) e todos veem o
   mesmo progresso. A tela busca as marcações dos outros a cada 20 segundos.
 - Não há login: qualquer pessoa com o endereço marca e desmarca.
 - O servidor gratuito dorme sem uso; o primeiro acesso do dia pode levar
   até um minuto.
-- As marcações são guardadas pela posição da etapa: inserir ou reordenar
-  etapas no meio da lista desloca as marcações existentes.
+- As marcações são guardadas pelo código fixo da etapa: renomear ou
+  reordenar etapas no portal não afeta o que já foi marcado.
 - As marcações são guardadas pelo nome do grupo: renomear um grupo na
   planilha faz ele perder as marcações.
