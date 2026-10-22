@@ -572,20 +572,23 @@ function exportarCSV() {
   baixar(`radar-contabil-${hoje}.csv`, '﻿' + [cab.map(cel).join(';'), ...linhas].join('\r\n'), 'text/csv;charset=utf-8');
 }
 // Exporta para Excel exatamente o que a tabela mostra (filtros, aba e ordem).
-// As mesmas colunas da tabela da tela, com a largura de cada uma no Excel.
+// As mesmas colunas da tabela da tela, com largura e alinhamento no Excel.
+// Formatação definida pela coordenação a partir de um arquivo exportado e
+// ajustado no Excel (2026-10-22): estilo "Azul, Estilo de Tabela Médio 2",
+// código e progresso à direita, texto à esquerda.
 const COLUNAS_EXPORTACAO = [
-  { nome: 'Código', largura: 10, valor: (c) => Number(c.id) || c.id },
-  { nome: 'Cliente', largura: 55, valor: (c) => c.nome },
-  { nome: 'Grupo', largura: 20, valor: (c) => c.grupo },
-  { nome: 'Coordenação', largura: 22, valor: (c) => c.coordenacao },
-  { nome: 'Responsável', largura: 22, valor: (c) => c.responsavel },
-  { nome: 'Tributação', largura: 22, valor: (c) => rotuloRegime(c.regime) },
-  { nome: 'Progresso', largura: 12, valor: (c) => feitasDe(c.id) / TOTAL_ETAPAS, formato: '0%' },
-  { nome: 'Etapa atual', largura: 45, valor: (c) => rotuloEtapaAtual(c) },
+  { nome: 'Código', largura: 10, alinhamento: 'right', valor: (c) => Number(c.id) || c.id },
+  { nome: 'Cliente', largura: 58.71, alinhamento: 'left', valor: (c) => c.nome },
+  { nome: 'Grupo', largura: 20, alinhamento: 'left', valor: (c) => c.grupo },
+  { nome: 'Coordenação', largura: 22, alinhamento: 'left', valor: (c) => c.coordenacao },
+  { nome: 'Responsável', largura: 22, alinhamento: 'left', valor: (c) => c.responsavel },
+  { nome: 'Tributação', largura: 22, alinhamento: 'left', valor: (c) => rotuloRegime(c.regime) },
+  { nome: 'Progresso', largura: 12, alinhamento: 'right', valor: (c) => feitasDe(c.id) / TOTAL_ETAPAS, formato: '0%' },
+  { nome: 'Etapa atual', largura: 45, alinhamento: 'left', valor: (c) => rotuloEtapaAtual(c) },
 ];
 
 // Exporta para Excel exatamente o que a tabela mostra (filtros, aba, ordem e
-// colunas), como tabela do Excel com cabeçalho vermelho MG e filtro.
+// colunas), como tabela do Excel com filtro em cada coluna.
 async function exportarTabela() {
   const lista = clientesDaTabela();
   if (!lista.length) { avisar('A tabela está vazia.'); return; }
@@ -597,24 +600,25 @@ async function exportarTabela() {
     name: 'RadarContabil',
     ref: 'A1',
     headerRow: true,
-    style: { theme: 'TableStyleLight1', showRowStripes: true },
+    style: { theme: 'TableStyleMedium2', showRowStripes: true },
     columns: COLUNAS_EXPORTACAO.map((col) => ({ name: col.nome, filterButton: true })),
     rows: lista.map((c) => COLUNAS_EXPORTACAO.map((col) => col.valor(c))),
   });
 
+  // As cores vêm do estilo da tabela; aqui só largura, alinhamento e formato.
   COLUNAS_EXPORTACAO.forEach((col, i) => {
     const coluna = ws.getColumn(i + 1);
     coluna.width = col.largura;
-    if (col.formato) coluna.numFmt = col.formato;
-    coluna.alignment = { vertical: 'middle', horizontal: col.formato || i === 0 ? 'center' : 'left' };
+    coluna.eachCell((cel, linha) => {
+      if (linha === 1) {
+        cel.alignment = { vertical: 'middle', horizontal: 'center' };
+        return;
+      }
+      cel.alignment = { vertical: 'middle', horizontal: col.alinhamento };
+      if (col.formato) cel.numFmt = col.formato;
+    });
   });
-  const cabecalho = ws.getRow(1);
-  cabecalho.height = 22;
-  cabecalho.eachCell((cel) => {
-    cel.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-    cel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFC00000' } };
-    cel.alignment = { vertical: 'middle', horizontal: 'center' };
-  });
+  ws.getRow(1).height = 22;
 
   const buffer = await wb.xlsx.writeBuffer();
   baixar(`radar-contabil-tabela-${new Date().toLocaleDateString('sv-SE')}.xlsx`, buffer,
