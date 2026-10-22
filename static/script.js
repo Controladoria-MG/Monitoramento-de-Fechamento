@@ -270,7 +270,14 @@ function animarNumero(el, alvo, sufixo) {
 }
 
 // ── Placares ──
-const filtros = { busca: '', coordenacao: '', regime: '', grupo: '', responsavel: '', status: '' };
+// etapa: código da etapa (texto); mostra os clientes que já a concluíram.
+const filtros = { busca: '', coordenacao: '', regime: '', grupo: '', responsavel: '', etapa: '', status: '' };
+const CAMPOS_FILTRO = ['coordenacao', 'regime', 'grupo', 'responsavel', 'etapa'];
+
+// Empresa sem movimento conta como feita em todas as etapas.
+function etapaConcluida(id, etapa) {
+  return marcada(id, etapa) || (!etapa.semMovimento && semMovimento(id));
+}
 let ordem = { campo: 'nome', dir: 1 };
 
 function agrupar(chave, rotulo = (v) => v || 'Não informado') {
@@ -323,10 +330,9 @@ function renderInicio() {
     .map((g) => htmlBarra(g.nome, detalheGrupo(g), g.pct, ['coordenacao', g.valor], filtros.coordenacao === g.valor)).join('');
   $('#barras-regime').innerHTML = agrupar('regime', rotuloRegime)
     .map((g) => htmlBarra(g.nome, detalheGrupo(g), g.pct, ['regime', g.valor], filtros.regime === g.valor)).join('');
-  // Empresa sem movimento conta como feita em todas as etapas.
   $('#barras-etapa').innerHTML = ETAPAS.map((e) => {
-    const n = CLIENTES.filter((c) => marcada(c.id, e) || (!e.semMovimento && semMovimento(c.id))).length;
-    return htmlBarra(e.nome, `${n} de ${CLIENTES.length}`, pct(n, CLIENTES.length), null, false);
+    const n = CLIENTES.filter((c) => etapaConcluida(c.id, e)).length;
+    return htmlBarra(e.nome, `${n} de ${CLIENTES.length}`, pct(n, CLIENTES.length), ['etapa', String(e.codigo)], filtros.etapa === String(e.codigo));
   }).join('');
 
   renderTabela();
@@ -341,9 +347,11 @@ function preencherFiltros() {
   $('#f-regime').innerHTML = opcoes('regime', 'Todas as tributações', rotuloRegime);
   $('#f-grupo').innerHTML = opcoes('grupo', 'Todos os grupos');
   $('#f-responsavel').innerHTML = opcoes('responsavel', 'Todos os responsáveis');
+  $('#f-etapa').innerHTML = '<option value="">Todas as etapas</option>' +
+    ETAPAS.map((e) => `<option value="${e.codigo}">Concluiu: ${escapeHTML(e.nome)}</option>`).join('');
 }
 function sincronizarFiltros() {
-  for (const k of ['coordenacao', 'regime', 'grupo', 'responsavel']) $('#f-' + k).value = filtros[k];
+  for (const k of CAMPOS_FILTRO) $('#f-' + k).value = filtros[k];
   $('#f-busca').value = filtros.busca;
 }
 
@@ -355,12 +363,15 @@ function clientesFiltrados() {
     (!filtros.coordenacao || c.coordenacao === filtros.coordenacao) &&
     (!filtros.regime || c.regime === filtros.regime) &&
     (!filtros.grupo || c.grupo === filtros.grupo) &&
-    (!filtros.responsavel || c.responsavel === filtros.responsavel));
+    (!filtros.responsavel || c.responsavel === filtros.responsavel) &&
+    (!filtros.etapa || etapaConcluida(c.id, porCodigo(Number(filtros.etapa)))));
 }
 
 const ROTULO_STATUS = { concluido: 'Concluído', andamento: 'Em andamento', pendente: 'Não iniciado' };
 
-function renderTabela() {
+// O que a tabela mostra agora: filtros + aba de status, na ordem escolhida.
+// A exportação usa a mesma lista.
+function clientesDaTabela() {
   const valorOrdem = (c) => {
     switch (ordem.campo) {
       case 'id': return Number(c.id);
@@ -370,16 +381,26 @@ function renderTabela() {
       default: return semAcento(c[ordem.campo]);
     }
   };
+  return clientesFiltrados().filter((c) => !filtros.status || statusDe(c.id) === filtros.status).sort((a, b) => {
+    const va = valorOrdem(a), vb = valorOrdem(b);
+    return (va < vb ? -1 : va > vb ? 1 : semAcento(a.nome).localeCompare(semAcento(b.nome))) * ordem.dir;
+  });
+}
+
+function rotuloEtapaAtual(c) {
+  if (semMovimento(c.id)) return 'Sem movimento';
+  const prox = proximaEtapa(c.id);
+  return prox ? prox.nome : ROTULO_STATUS.concluido;
+}
+
+function renderTabela() {
   const base = clientesFiltrados();
   document.querySelectorAll('.tabela-aba').forEach((aba) => {
     const st = aba.dataset.status;
     aba.classList.toggle('ativa', st === filtros.status);
     aba.querySelector('b').textContent = st ? base.filter((c) => statusDe(c.id) === st).length : base.length;
   });
-  const lista = base.filter((c) => !filtros.status || statusDe(c.id) === filtros.status).sort((a, b) => {
-    const va = valorOrdem(a), vb = valorOrdem(b);
-    return (va < vb ? -1 : va > vb ? 1 : semAcento(a.nome).localeCompare(semAcento(b.nome))) * ordem.dir;
-  });
+  const lista = clientesDaTabela();
   document.querySelectorAll('th[data-ordem]').forEach((th) => {
     th.querySelector('.seta')?.remove();
     if (th.dataset.ordem === ordem.campo) th.insertAdjacentHTML('beforeend', `<span class="seta">${ordem.dir > 0 ? '▲' : '▼'}</span>`);
@@ -391,9 +412,9 @@ function renderTabela() {
   }
   $('#tabela-corpo').innerHTML = lista.map((c) => {
     const f = feitasDe(c.id), p = pct(f, TOTAL_ETAPAS), st = statusDe(c.id), prox = proximaEtapa(c.id);
-    const etapaAtual = semMovimento(c.id)
-      ? `<span class="etiqueta etq-concluido">Sem movimento</span>`
-      : prox ? escapeHTML(prox.nome) : `<span class="etiqueta etq-concluido">${ROTULO_STATUS.concluido}</span>`;
+    const etapaAtual = prox
+      ? escapeHTML(prox.nome)
+      : `<span class="etiqueta etq-concluido">${escapeHTML(rotuloEtapaAtual(c))}</span>`;
     return `<tr data-id="${escapeHTML(c.id)}">
       <td class="num">${escapeHTML(c.id)}</td>
       <td class="cel-cliente">${escapeHTML(c.nome)}${c.matriz ? `<small>Filial da matriz ${escapeHTML(c.matriz)}</small>` : ''}</td>
@@ -550,6 +571,35 @@ function exportarCSV() {
   const hoje = new Date().toLocaleDateString('sv-SE');
   baixar(`radar-contabil-${hoje}.csv`, '﻿' + [cab.map(cel).join(';'), ...linhas].join('\r\n'), 'text/csv;charset=utf-8');
 }
+// Exporta para Excel exatamente o que a tabela mostra (filtros, aba e ordem).
+function exportarTabela() {
+  const lista = clientesDaTabela();
+  if (!lista.length) { avisar('A tabela está vazia.'); return; }
+  const linhas = lista.map((c) => {
+    const r = registro(c.id, false);
+    const linha = {
+      'Código': Number(c.id) || c.id,
+      Cliente: c.nome,
+      Grupo: c.grupo,
+      'Coordenação': c.coordenacao,
+      'Responsável': c.responsavel,
+      'Tributação': rotuloRegime(c.regime),
+      'Progresso (%)': pct(feitasDe(c.id), TOTAL_ETAPAS),
+      'Etapa atual': rotuloEtapaAtual(c),
+      'Situação': semMovimento(c.id) ? 'Sem movimento' : ROTULO_STATUS[statusDe(c.id)],
+    };
+    for (const e of ETAPAS) {
+      linha[e.nome] = r?.etapas[e.codigo] ? formatarQuando(r.etapas[e.codigo]).replace(' às ', ' ') : '';
+    }
+    return linha;
+  });
+  const aba = XLSX.utils.json_to_sheet(linhas);
+  aba['!cols'] = Object.keys(linhas[0]).map((k) => ({ wch: k === 'Cliente' ? 50 : Math.max(12, Math.min(k.length + 2, 40)) }));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, aba, 'Radar Contábil');
+  XLSX.writeFile(wb, `radar-contabil-tabela-${new Date().toLocaleDateString('sv-SE')}.xlsx`);
+}
+
 function atualizarTudo() {
   if ($('#tela-inicio').classList.contains('visivel')) renderInicio();
   else renderTratamento();
@@ -558,6 +608,7 @@ function atualizarTudo() {
 // ── Eventos ──
 $('#btn-ir-tratamento').addEventListener('click', () => irPara(clienteAtual ? '#tratamento/' + encodeURIComponent(clienteAtual.id) : '#tratamento'));
 $('#btn-ir-inicio').addEventListener('click', () => irPara('#inicio'));
+$('#btn-voltar').addEventListener('click', () => irPara('#inicio'));
 window.addEventListener('hashchange', () => { if (CLIENTES.length) lerEndereco(); });
 
 $('#btn-menu').addEventListener('click', (e) => { e.stopPropagation(); $('#menu-dados').classList.toggle('aberto'); });
@@ -589,7 +640,7 @@ $('#tabela-abas').addEventListener('click', (e) => {
   filtros.status = aba.dataset.status;
   renderInicio();
 });
-for (const k of ['coordenacao', 'regime', 'grupo', 'responsavel']) {
+for (const k of CAMPOS_FILTRO) {
   $('#f-' + k).addEventListener('change', (e) => { filtros[k] = e.target.value; renderInicio(); });
 }
 $('#f-busca').addEventListener('input', (e) => { filtros.busca = e.target.value; renderTabela(); });
@@ -597,17 +648,21 @@ $('#f-limpar').addEventListener('click', () => {
   Object.keys(filtros).forEach((k) => (filtros[k] = ''));
   sincronizarFiltros(); renderInicio();
 });
+$('#f-exportar').addEventListener('click', exportarTabela);
+// Clique numa linha dos cards: filtra a tabela por ela e desce até a tabela.
+// Clicar de novo na mesma linha tira o filtro.
 document.querySelector('.grade').addEventListener('click', (e) => {
   const b = e.target.closest('button[data-filtro]');
   if (!b) return;
   const k = b.dataset.filtro;
   filtros[k] = filtros[k] === b.dataset.valor ? '' : b.dataset.valor;
   sincronizarFiltros(); renderInicio();
+  if (filtros[k]) $('.tabela-cartao').scrollIntoView({ behavior: 'smooth', block: 'start' });
 });
 document.querySelectorAll('.kpi[data-status]').forEach((k) => k.addEventListener('click', () => {
   filtros.status = filtros.status === k.dataset.status ? '' : k.dataset.status;
   renderInicio();
-  $('#tabela-abas').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  $('.tabela-cartao').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }));
 document.querySelectorAll('th[data-ordem]').forEach((th) => th.addEventListener('click', () => {
   ordem = { campo: th.dataset.ordem, dir: ordem.campo === th.dataset.ordem ? -ordem.dir : (th.dataset.ordem === 'pct' ? -1 : 1) };

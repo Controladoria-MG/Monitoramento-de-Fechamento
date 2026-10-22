@@ -160,7 +160,7 @@ button.barra-linha.ativa { background: var(--vermelho-suave); }
 .barra-cheia { display: block; height: 100%; border-radius: 4px; background: var(--mg-vermelho); transition: width .5s ease; }
 
 /* ── Tabela ── */
-.tabela-cartao { padding: 0; overflow: hidden; }
+.tabela-cartao { padding: 0; overflow: hidden; scroll-margin-top: 90px; }
 .tabela-abas { display: flex; gap: 8px; flex-wrap: wrap; padding: 12px 12px 0; border-bottom: 2px solid var(--mg-vermelho); }
 .tabela-aba {
   font-size: 0.82rem; font-weight: 700; padding: 8px 20px;

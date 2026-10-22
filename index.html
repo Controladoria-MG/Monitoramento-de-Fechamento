@@ -79,7 +79,7 @@
       <div class="barras" id="barras-regime"></div>
     </div>
     <div class="cartao">
-      <div class="cartao-titulo"><h2>Por etapa</h2><span>clientes que concluíram</span></div>
+      <div class="cartao-titulo"><h2>Por etapa</h2><span>clique para ver quem concluiu</span></div>
       <div class="barras" id="barras-etapa"></div>
     </div>
   </section>
@@ -97,7 +97,9 @@
       <select class="select" id="f-regime"></select>
       <select class="select" id="f-grupo"></select>
       <select class="select" id="f-responsavel"></select>
+      <select class="select" id="f-etapa"></select>
       <button class="btn" id="f-limpar">Limpar filtros</button>
+      <button class="btn" id="f-exportar">Exportar tabela</button>
       <span class="contagem" id="f-contagem"></span>
     </div>
     <div class="tabela-caixa">
@@ -123,6 +125,7 @@
 <!-- ── Checklist ── -->
 <main class="tela" id="tela-tratamento">
   <div class="titulo-tela">
+    <button class="btn" id="btn-voltar" type="button">&#8592; Voltar aos placares</button>
     <div class="busca-cliente">
       <input class="input" id="busca-cliente" autocomplete="off" placeholder="Digite o nome ou o código do cliente">
       <div class="sugestoes" id="sugestoes"></div>
