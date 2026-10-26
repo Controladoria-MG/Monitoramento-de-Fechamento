@@ -6,9 +6,9 @@ venv/
 *.log
 .DS_Store
 
-data/radar_contabil/*.xlsx
+data/trilha_fechamento/*.xlsx
 # ...exceto a planilha única que o portal lê (fetch + SheetJS).
-!data/radar_contabil/resumo.xlsx
+!data/trilha_fechamento/resumo.xlsx
 
 # O script de atualização roda só localmente, como nos outros portais.
 backend/
