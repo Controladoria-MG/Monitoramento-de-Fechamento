@@ -1,8 +1,8 @@
-# CLAUDE.md — Trilha de Fechamento
+# CLAUDE.md — Monitoramento de Fechamento
 
-Checklist das etapas de fechamento contábil por cliente, com placares por coordenação, tributação e etapa. Publicado no GitHub Pages (`Controladoria-MG/Trilha-de-Fechamento`) e listado na Central de Relatórios.
+Checklist das etapas de fechamento contábil por cliente, com placares por coordenação, tributação e etapa. Publicado no GitHub Pages (`Controladoria-MG/Monitoramento-de-Fechamento`) e listado na Central de Relatórios.
 
-O projeto se chamava **Radar Contábil** até 2026-10-26. O nome antigo continua só no que ninguém vê: as rotas `/api/radar-contabil` e a tabela `radar_contabil_etapas` no servidor do Quadro (renomear ali exigiria migrar o banco).
+O projeto se chamava **Radar Contábil** até 2026-10-26 e, por um dia, **Trilha de Fechamento**. O nome antigo continua só no que ninguém vê: as rotas `/api/radar-contabil` e a tabela `radar_contabil_etapas` no servidor do Quadro (renomear ali exigiria migrar o banco).
 
 ## Estrutura de Diretórios
 
@@ -18,7 +18,7 @@ Raiz/
 │   ├── style.css
 │   └── logo.png
 ├── data/
-│   └── trilha_fechamento/
+│   └── monitoramento_fechamento/
 │       ├── resumo.xlsx   (a base que o portal lê)
 │       └── status.json   (data da última atualização)
 └── backend/
@@ -38,13 +38,13 @@ Raiz/
 - Texto vindo da planilha só entra em `innerHTML` passando por `escapeHTML()`.
 
 ### Dados (`data/`)
-- Tudo dentro de `data/trilha_fechamento/`, nunca na raiz de `data/`.
+- Tudo dentro de `data/monitoramento_fechamento/`, nunca na raiz de `data/`.
 - `resumo.xlsx` é cópia da planilha de controle "Resumo da utilização da Conciliação 2.xlsx" (pasta `python/`, acima deste projeto). Só a aba `Clientes` é usada: ID, CodMatriz, RazaoSocial, Grupo, Gerente, Master, Regime, Segmento, Responsável, Coordenação, Departamento. Colunas a mais são ignoradas; o mapa fica em `CAMPOS` no `script.js`.
 - A aba `etapas` da planilha **não é mais usada**: as etapas ficam fixas em `ETAPAS` no `script.js` (ver "Etapas do checklist").
 - O portal lê com `fetch` + SheetJS (`carregarDados()`). Por isso precisa de servidor: `file://` bloqueia o fetch.
 
 ### Backend (`backend/`)
-- `atualizar_base.py`: copia a planilha para `data/trilha_fechamento/resumo.xlsx`, confere a aba `Clientes` e grava `status.json`. Com `--publicar`, faz commit e push só desses dois arquivos.
+- `atualizar_base.py`: copia a planilha para `data/monitoramento_fechamento/resumo.xlsx`, confere a aba `Clientes` e grava `status.json`. Com `--publicar`, faz commit e push só desses dois arquivos.
 - Funciona com a planilha aberta no Excel: o Python não abre o arquivo travado, então a cópia é feita pelo `Copy-Item` do PowerShell.
 
 ### Marcações (compartilhadas)
@@ -52,7 +52,7 @@ Raiz/
 - API (`API_PADRAO` no `script.js`): `GET https://wj-quadro.onrender.com/api/radar-contabil/progresso` devolve `{grupos: {"g:<grupo>": {etapas: {"0": iso, ...}}}}`; `PUT .../marcacao` com `{grupo, etapa, feito}` marca ou desmarca. O código das rotas está no `backend/main.py` do repositório WJ-Quadro, seção "ROTAS — RADAR CONTÁBIL".
 - O clique muda a tela na hora e grava em seguida; se o servidor recusar, a marcação volta e aparece um aviso. A cada 20 s a tela busca o que os outros marcaram (`atualizarEmSegundoPlano`).
 - Não há login: qualquer pessoa com o endereço marca e desmarca. Por isso não existe "limpar todas as marcações".
-- No navegador (`localStorage`, chave `trilha-de-fechamento:preferencias`) fica só o tema.
+- No navegador (`localStorage`, chave `monitoramento-de-fechamento:preferencias`) fica só o tema.
 - Para testar com um Quadro local: `http://localhost:8794/?api=http://127.0.0.1:8000/api/radar-contabil` (o parâmetro `api` só vale em localhost).
 
 ## Etapas do checklist
@@ -93,7 +93,7 @@ Definidas em `ETAPAS` no `script.js` (pedido da coordenação, 2026-10-22), nest
 ## Como rodar
 
 ```
-cd Trilha-de-Fechamento
+cd Monitoramento-de-Fechamento
 python backend/atualizar_base.py
 python -m http.server 8794
 ```

@@ -1,4 +1,4 @@
-TRILHA DE FECHAMENTO — documentação técnica
+MONITORAMENTO DE FECHAMENTO — documentação técnica
 ============================================
 
 O QUE É
@@ -9,7 +9,7 @@ tabela de clientes com abas Não iniciados / Em andamento / Clientes concluídos
 A tela "Checklist" abre um cliente pelo código ou nome e mostra as etapas com
 uma rosca que preenche a cada etapa marcada.
 
-Endereço: https://controladoria-mg.github.io/Trilha-de-Fechamento/
+Endereço: https://controladoria-mg.github.io/Monitoramento-de-Fechamento/
 
 ORIGEM DOS DADOS
 ----------------
@@ -35,7 +35,7 @@ Marcar uma etapa de 100% marca junto a parcial dela (80%, 60% ou 85/90%);
 desmarcar a parcial desmarca a de 100%. O progresso conta as etapas 2 a 9.
 
 backend/atualizar_base.py copia essa planilha para
-data/trilha_fechamento/resumo.xlsx e grava status.json. O portal lê o
+data/monitoramento_fechamento/resumo.xlsx e grava status.json. O portal lê o
 resumo.xlsx com SheetJS no navegador.
 
 ATUALIZAR A BASE

@@ -1,8 +1,8 @@
 // ── Dados ──
-// A base de clientes vem de data/trilha_fechamento/resumo.xlsx (aba "Clientes"),
+// A base de clientes vem de data/monitoramento_fechamento/resumo.xlsx (aba "Clientes"),
 // lida no navegador com SheetJS, igual aos outros portais.
-const ARQUIVO_DADOS = 'data/trilha_fechamento/resumo.xlsx';
-const ARQUIVO_STATUS = 'data/trilha_fechamento/status.json';
+const ARQUIVO_DADOS = 'data/monitoramento_fechamento/resumo.xlsx';
+const ARQUIVO_STATUS = 'data/monitoramento_fechamento/status.json';
 let CLIENTES = [];
 
 // Etapas do checklist, na ordem da tela. O código é o que vai para o servidor:
@@ -68,7 +68,7 @@ async function carregarStatus() {
 // ── Utilitários ──
 const $ = (s) => document.querySelector(s);
 // O github.io é o mesmo endereço para todos os portais: a chave precisa ser única.
-const CHAVE = 'trilha-de-fechamento:preferencias';
+const CHAVE = 'monitoramento-de-fechamento:preferencias';
 
 function escapeHTML(v) {
   return String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -569,7 +569,7 @@ function exportarCSV() {
       pct(feitasDe(c.id), TOTAL_ETAPAS) + '%', semMovimento(c.id) ? 'Sem movimento' : ROTULO_STATUS[statusDe(c.id)]].map(cel).join(';');
   });
   const hoje = new Date().toLocaleDateString('sv-SE');
-  baixar(`trilha-de-fechamento-${hoje}.csv`, '﻿' + [cab.map(cel).join(';'), ...linhas].join('\r\n'), 'text/csv;charset=utf-8');
+  baixar(`monitoramento-de-fechamento-${hoje}.csv`, '﻿' + [cab.map(cel).join(';'), ...linhas].join('\r\n'), 'text/csv;charset=utf-8');
 }
 // Exporta para Excel exatamente o que a tabela mostra (filtros, aba e ordem).
 // As mesmas colunas da tabela da tela, com largura e alinhamento no Excel.
@@ -595,9 +595,9 @@ async function exportarTabela() {
   if (typeof ExcelJS === 'undefined') { avisar('Não foi possível gerar o Excel. Atualize a página.'); return; }
 
   const wb = new ExcelJS.Workbook();
-  const ws = wb.addWorksheet('Trilha de Fechamento', { views: [{ state: 'frozen', ySplit: 1 }] });
+  const ws = wb.addWorksheet('Monitoramento de Fechamento', { views: [{ state: 'frozen', ySplit: 1 }] });
   ws.addTable({
-    name: 'TrilhaDeFechamento',
+    name: 'MonitoramentoDeFechamento',
     ref: 'A1',
     headerRow: true,
     style: { theme: 'TableStyleMedium2', showRowStripes: true },
@@ -621,7 +621,7 @@ async function exportarTabela() {
   ws.getRow(1).height = 22;
 
   const buffer = await wb.xlsx.writeBuffer();
-  baixar(`trilha-de-fechamento-tabela-${new Date().toLocaleDateString('sv-SE')}.xlsx`, buffer,
+  baixar(`monitoramento-de-fechamento-tabela-${new Date().toLocaleDateString('sv-SE')}.xlsx`, buffer,
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
 }
 
