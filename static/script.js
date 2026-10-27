@@ -106,16 +106,13 @@ function baixar(nome, conteudo, tipo) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-// ── Marcações (compartilhadas, no servidor) ──
+// ── Marcações (compartilhadas, no servidor do Quadro) ──
 // O progresso é do grupo: uma etapa marcada vale para todos os clientes dele.
 // Cliente sem grupo tem o próprio registro. Todos veem as mesmas marcações;
 // no navegador fica só a preferência de tema.
-// Servido pelo servidor/app.py (hospedagem definitiva), a API fica no mesmo
-// endereço do portal. No piloto (GitHub Pages), as marcações ficam no Quadro.
-const API_PILOTO = 'https://wj-quadro.onrender.com/api/radar-contabil';
-const API_PADRAO = location.hostname.endsWith('github.io') ? API_PILOTO : 'api/fechamento';
+const API_PADRAO = 'https://wj-quadro.onrender.com/api/radar-contabil';
 const local = ['localhost', '127.0.0.1'].includes(location.hostname);
-// Para testar com outro servidor: http://localhost:8000/?api=http://127.0.0.1:8001/api/fechamento
+// Para testar com um servidor local: http://localhost:8794/?api=http://127.0.0.1:8000/api/radar-contabil
 const API = (local && new URLSearchParams(location.search).get('api')) || API_PADRAO;
 const INTERVALO_ATUALIZACAO = 20000;
 
