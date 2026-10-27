@@ -1,17 +1,9 @@
 // ── Dados ──
-// A base de clientes vem de data/monitoramento_fechamento/dados.js, gerado a
-// partir da planilha (aba "Clientes") por backend/atualizar_base.py. É um
-// script, e não um .json lido com fetch, para funcionar também abrindo o
-// index.html direto do disco, sem servidor.
+// Base de clientes gerada a partir da planilha.
 const ARQUIVO_DADOS = 'data/monitoramento_fechamento/dados.js';
 let CLIENTES = [];
 
-// Etapas do checklist, na ordem da tela. O código é o que vai para o servidor:
-// nunca reaproveite nem mude o código de uma etapa (as marcações dependem dele).
-// Os códigos 0 a 5 foram da primeira versão e não devem ser usados.
-//  - semMovimento: conclui o cliente e trava as demais etapas.
-//  - parcial: marcar esta etapa marca junto a parcial dela;
-//    desmarcar a parcial desmarca esta.
+// Etapas do checklist. Os códigos são gravados no servidor: não altere.
 const ETAPAS = [
   { codigo: 10, nome: 'Empresa sem movimento', semMovimento: true },
   { codigo: 11, nome: 'Recebimento da documentação contábil 100%', parcial: 12 },
@@ -24,19 +16,17 @@ const ETAPAS = [
   { codigo: 18, nome: 'Fechamento liberado' },
 ];
 const ETAPA_SEM_MOVIMENTO = ETAPAS.find((e) => e.semMovimento);
-// As que contam no progresso (todas menos "sem movimento").
 const ETAPAS_TRABALHO = ETAPAS.filter((e) => !e.semMovimento);
 const TOTAL_ETAPAS = ETAPAS_TRABALHO.length;
 const porCodigo = (codigo) => ETAPAS.find((e) => e.codigo === codigo);
 
-// Coluna da planilha -> campo usado no portal
+// Coluna da planilha -> campo do portal
 const CAMPOS = {
   ID: 'id', CodMatriz: 'matriz', RazaoSocial: 'nome', Grupo: 'grupo', Gerente: 'gerente',
   Master: 'master', Regime: 'regime', Segmento: 'segmento', 'Responsável': 'responsavel',
   'Coordenação': 'coordenacao', Departamento: 'departamento',
 };
 
-// Carrega o dados.js. Num servidor, o ?t= evita receber uma versão antiga do cache.
 function carregarBase() {
   return new Promise((ok, falha) => {
     const el = document.createElement('script');
@@ -71,7 +61,6 @@ function mostrarAtualizacao(iso) {
 
 // ── Utilitários ──
 const $ = (s) => document.querySelector(s);
-// O github.io é o mesmo endereço para todos os portais: a chave precisa ser única.
 const CHAVE = 'monitoramento-de-fechamento:preferencias';
 
 function escapeHTML(v) {
@@ -110,13 +99,10 @@ function baixar(nome, conteudo, tipo) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-// ── Marcações (compartilhadas, no servidor do Quadro) ──
-// O progresso é do grupo: uma etapa marcada vale para todos os clientes dele.
-// Cliente sem grupo tem o próprio registro. Todos veem as mesmas marcações;
-// no navegador fica só a preferência de tema.
+// ── Marcações ──
+// Gravadas no servidor, por grupo de clientes.
 const API_PADRAO = 'https://wj-quadro.onrender.com/api/radar-contabil';
 const local = ['localhost', '127.0.0.1'].includes(location.hostname);
-// Para testar com um servidor local: http://localhost:8794/?api=http://127.0.0.1:8000/api/radar-contabil
 const API = (local && new URLSearchParams(location.search).get('api')) || API_PADRAO;
 const INTERVALO_ATUALIZACAO = 20000;
 
@@ -128,11 +114,11 @@ function chaveGrupo(c) { return c.grupo ? 'g:' + c.grupo : 'c:' + c.id; }
 try {
   const salvo = JSON.parse(localStorage.getItem(CHAVE) || 'null');
   if (salvo && typeof salvo === 'object') banco.prefs = salvo.prefs || {};
-} catch (e) { /* sem armazenamento: segue só em memória */ }
+} catch (e) { /* sem armazenamento local */ }
 
 function salvarPreferencias() {
   try { localStorage.setItem(CHAVE, JSON.stringify({ prefs: banco.prefs })); }
-  catch (e) { /* tema só não fica lembrado */ }
+  catch (e) { /* sem armazenamento local */ }
 }
 
 async function carregarProgresso() {
@@ -141,8 +127,7 @@ async function carregarProgresso() {
   return (await resp.json()).grupos || {};
 }
 
-// Busca o que os outros marcaram. Não redesenha enquanto há gravação em
-// andamento ou a lista de sugestões da busca está aberta.
+// Busca as marcações feitas por outros usuários.
 async function atualizarEmSegundoPlano() {
   if (gravacoesPendentes || document.hidden) return;
   try {
@@ -150,7 +135,7 @@ async function atualizarEmSegundoPlano() {
     if (gravacoesPendentes || JSON.stringify(grupos) === JSON.stringify(banco.grupos)) return;
     banco.grupos = grupos;
     if (!$('#sugestoes').classList.contains('aberta')) atualizarTudo();
-  } catch (e) { /* tenta de novo no próximo ciclo */ }
+  } catch (e) { /* tenta no próximo ciclo */ }
 }
 
 function registro(id, criar) {
@@ -176,8 +161,7 @@ function proximaEtapa(id) {
   return ETAPAS_TRABALHO.find((e) => !marcada(id, e)) || null;
 }
 
-// Etapas que mudam junto com um clique: a de 100% leva a parcial ao ser
-// marcada; a parcial leva a de 100% ao ser desmarcada.
+// Etapas parciais acompanham a etapa completa.
 function etapasAfetadas(id, etapa, marcar) {
   const lista = [etapa];
   if (marcar && etapa.parcial && !marcada(id, porCodigo(etapa.parcial))) lista.push(porCodigo(etapa.parcial));
@@ -188,7 +172,6 @@ function etapasAfetadas(id, etapa, marcar) {
   return lista;
 }
 
-// A tela muda na hora; se o servidor recusar, as marcações voltam ao que eram.
 async function alternarEtapa(id, codigo) {
   const etapa = porCodigo(codigo);
   if (!etapa || (!etapa.semMovimento && semMovimento(id))) return;
@@ -226,7 +209,6 @@ async function alternarEtapa(id, codigo) {
 }
 
 // ── Rosca ──
-// Um segmento por etapa; cada clique acende o segmento correspondente.
 function desenharRosca(el, feitas, total, mostrarTexto = true) {
   const r = 70, c = 2 * Math.PI * r, folga = total > 1 ? 5 : 0;
   const tam = c / total - folga;
@@ -247,7 +229,6 @@ function desenharRosca(el, feitas, total, mostrarTexto = true) {
     el.querySelector('.rosca-sub').textContent = `${feitas} de ${plural(total, 'etapa', 'etapas')}`;
   }
 }
-// A rosca do placar mostra o percentual geral como arco contínuo.
 function desenharRoscaContinua(el, valor) {
   const r = 70, c = 2 * Math.PI * r;
   if (!el.dataset.montada) {
@@ -274,11 +255,9 @@ function animarNumero(el, alvo, sufixo) {
 }
 
 // ── Placares ──
-// etapa: código da etapa (texto); mostra os clientes que já a concluíram.
 const filtros = { busca: '', coordenacao: '', regime: '', grupo: '', responsavel: '', etapa: '', status: '' };
 const CAMPOS_FILTRO = ['coordenacao', 'regime', 'grupo', 'responsavel', 'etapa'];
 
-// Empresa sem movimento conta como feita em todas as etapas.
 function etapaConcluida(id, etapa) {
   return marcada(id, etapa) || (!etapa.semMovimento && semMovimento(id));
 }
@@ -359,7 +338,6 @@ function sincronizarFiltros() {
   $('#f-busca').value = filtros.busca;
 }
 
-// Filtros da tabela, sem a aba de status (as abas contam sobre este conjunto).
 function clientesFiltrados() {
   const termo = semAcento(filtros.busca.trim());
   return CLIENTES.filter((c) =>
@@ -373,8 +351,6 @@ function clientesFiltrados() {
 
 const ROTULO_STATUS = { concluido: 'Concluído', andamento: 'Em andamento', pendente: 'Não iniciado' };
 
-// O que a tabela mostra agora: filtros + aba de status, na ordem escolhida.
-// A exportação usa a mesma lista.
 function clientesDaTabela() {
   const valorOrdem = (c) => {
     switch (ordem.campo) {
@@ -575,11 +551,6 @@ function exportarCSV() {
   const hoje = new Date().toLocaleDateString('sv-SE');
   baixar(`monitoramento-de-fechamento-${hoje}.csv`, '﻿' + [cab.map(cel).join(';'), ...linhas].join('\r\n'), 'text/csv;charset=utf-8');
 }
-// Exporta para Excel exatamente o que a tabela mostra (filtros, aba e ordem).
-// As mesmas colunas da tabela da tela, com largura e alinhamento no Excel.
-// Formatação definida pela coordenação a partir de um arquivo exportado e
-// ajustado no Excel (2026-10-22): estilo "Azul, Estilo de Tabela Médio 2",
-// código e progresso à direita, texto à esquerda.
 const COLUNAS_EXPORTACAO = [
   { nome: 'Código', largura: 10, alinhamento: 'right', valor: (c) => Number(c.id) || c.id },
   { nome: 'Cliente', largura: 58.71, alinhamento: 'left', valor: (c) => c.nome },
@@ -591,8 +562,7 @@ const COLUNAS_EXPORTACAO = [
   { nome: 'Etapa atual', largura: 45, alinhamento: 'left', valor: (c) => rotuloEtapaAtual(c) },
 ];
 
-// Exporta para Excel exatamente o que a tabela mostra (filtros, aba, ordem e
-// colunas), como tabela do Excel com filtro em cada coluna.
+// Exporta para Excel o que a tabela mostra.
 async function exportarTabela() {
   const lista = clientesDaTabela();
   if (!lista.length) { avisar('A tabela está vazia.'); return; }
@@ -609,7 +579,6 @@ async function exportarTabela() {
     rows: lista.map((c) => COLUNAS_EXPORTACAO.map((col) => col.valor(c))),
   });
 
-  // As cores vêm do estilo da tabela; aqui só largura, alinhamento e formato.
   COLUNAS_EXPORTACAO.forEach((col, i) => {
     const coluna = ws.getColumn(i + 1);
     coluna.width = col.largura;
@@ -678,8 +647,6 @@ $('#f-limpar').addEventListener('click', () => {
   sincronizarFiltros(); renderInicio();
 });
 $('#f-exportar').addEventListener('click', exportarTabela);
-// Clique numa linha dos cards: filtra a tabela por ela e desce até a tabela.
-// Clicar de novo na mesma linha tira o filtro.
 document.querySelector('.grade').addEventListener('click', (e) => {
   const b = e.target.closest('button[data-filtro]');
   if (!b) return;
@@ -760,7 +727,6 @@ $('#btn-proximo').addEventListener('click', () => {
 
 // ── Início ──
 aplicarTema(banco.prefs.tema === 'escuro' ? 'escuro' : 'claro');
-// O servidor gratuito dorme sem uso; o primeiro acesso do dia demora a acordar.
 const avisoDemora = setTimeout(() => {
   $('#carregando').textContent = 'Conectando ao servidor. O primeiro acesso do dia pode levar até um minuto.';
 }, 4000);

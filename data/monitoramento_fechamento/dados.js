@@ -1,6 +1,6 @@
-// Gerado por backend/atualizar_base.py a partir da planilha de controle. Não edite à mão.
+// Gerado a partir da planilha. Não edite à mão.
 window.BASE_FECHAMENTO = {
- "atualizadoEm": "2026-10-27T10:54:11",
+ "atualizadoEm": "2026-10-27T16:30:19",
  "clientes": [
   {
    "ID": 305,
