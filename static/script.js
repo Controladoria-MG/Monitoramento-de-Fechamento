@@ -1,8 +1,9 @@
 // ── Dados ──
-// A base de clientes vem de data/monitoramento_fechamento/resumo.xlsx (aba "Clientes"),
-// lida no navegador com SheetJS, igual aos outros portais.
-const ARQUIVO_DADOS = 'data/monitoramento_fechamento/resumo.xlsx';
-const ARQUIVO_STATUS = 'data/monitoramento_fechamento/status.json';
+// A base de clientes vem de data/monitoramento_fechamento/dados.js, gerado a
+// partir da planilha (aba "Clientes") por backend/atualizar_base.py. É um
+// script, e não um .json lido com fetch, para funcionar também abrindo o
+// index.html direto do disco, sem servidor.
+const ARQUIVO_DADOS = 'data/monitoramento_fechamento/dados.js';
 let CLIENTES = [];
 
 // Etapas do checklist, na ordem da tela. O código é o que vai para o servidor:
@@ -35,13 +36,20 @@ const CAMPOS = {
   'Coordenação': 'coordenacao', Departamento: 'departamento',
 };
 
-async function carregarDados() {
-  const resp = await fetch(ARQUIVO_DADOS, { cache: 'no-store' });
-  if (!resp.ok) throw new Error('Planilha não encontrada');
-  const wb = XLSX.read(await resp.arrayBuffer(), { type: 'array' });
+// Carrega o dados.js. Num servidor, o ?t= evita receber uma versão antiga do cache.
+function carregarBase() {
+  return new Promise((ok, falha) => {
+    const el = document.createElement('script');
+    el.src = ARQUIVO_DADOS + (location.protocol === 'file:' ? '' : '?t=' + Date.now());
+    el.onload = () => (window.BASE_FECHAMENTO ? ok(window.BASE_FECHAMENTO) : falha(new Error('Base vazia')));
+    el.onerror = () => falha(new Error('Base não encontrada'));
+    document.head.appendChild(el);
+  });
+}
 
-  const linhas = XLSX.utils.sheet_to_json(wb.Sheets.Clientes, { defval: '' });
-  CLIENTES = linhas
+async function carregarDados() {
+  const base = await carregarBase();
+  CLIENTES = base.clientes
     .map((l) => {
       const c = {};
       for (const [col, valor] of Object.entries(l)) {
@@ -52,17 +60,13 @@ async function carregarDados() {
       return c;
     })
     .filter((c) => c.id !== '' && c.id !== undefined);
+  mostrarAtualizacao(base.atualizadoEm);
 }
 
-async function carregarStatus() {
-  try {
-    const resp = await fetch(ARQUIVO_STATUS, { cache: 'no-store' });
-    const st = await resp.json();
-    const d = new Date(st.ultima_execucao);
-    $('#status-execucao').textContent = `Base atualizada em ${d.toLocaleDateString('pt-BR')} às ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
-  } catch (e) {
-    $('#status-execucao').textContent = 'Etapas de fechamento por cliente';
-  }
+function mostrarAtualizacao(iso) {
+  const d = new Date(iso);
+  $('#status-execucao').textContent = isNaN(d) ? 'Etapas de fechamento por cliente'
+    : `Base atualizada em ${d.toLocaleDateString('pt-BR')} às ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
 }
 
 // ── Utilitários ──
@@ -756,7 +760,6 @@ $('#btn-proximo').addEventListener('click', () => {
 
 // ── Início ──
 aplicarTema(banco.prefs.tema === 'escuro' ? 'escuro' : 'claro');
-carregarStatus();
 // O servidor gratuito dorme sem uso; o primeiro acesso do dia demora a acordar.
 const avisoDemora = setTimeout(() => {
   $('#carregando').textContent = 'Conectando ao servidor. O primeiro acesso do dia pode levar até um minuto.';
