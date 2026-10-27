@@ -21,27 +21,18 @@ Planilha de controle: python/Resumo da utilização da Conciliação 2.xlsx
 
 ETAPAS DO CHECKLIST
 -------------------
- 0. Empresa sem movimento: conclui o cliente e trava as demais etapas
-    (o que já estava marcado fica guardado e volta a valer ao desmarcar).
- 1. Recebimento da documentação contábil: 80% (já é possível realizar o
-    fechamento) ou 100%
- 2. Conciliação da folha
- 3. Conciliação fiscal: 60% ICMS (falta PIS/Cofins) ou 100% (resumo fiscal)
- 4. Conciliação financeira: 85/90% (já é possível enviar uma prévia) ou 100%
- 5. Fechamento liberado
+ 1. Empresa sem movimento: conclui o cliente e trava as demais etapas.
+ 2. Recebimento da documentação contábil 100%
+ 3. Recebimento da documentação contábil 80% (já é possível realizar o fechamento)
+ 4. Conciliação da folha
+ 5. Conciliação do resumo fiscal 100%
+ 6. Conciliação do fiscal 60% - ICMS (falta PIS/Cofins)
+ 7. Conciliação financeira 100%
+ 8. Conciliação financeira 85/90% (já é possível enviar uma prévia)
+ 9. Fechamento liberado
 
-Como marcar:
-- Clique na linha para avançar a etapa um nível (nada -> parcial -> 100% ->
-  nada); clique no percentual para ir direto a ele. Clicar no percentual em
-  que a etapa já está volta um nível.
-- Teclas 1 a 5 fazem o mesmo que clicar na linha; 0 marca/desmarca
-  "sem movimento".
-- Toda marcação mostra um aviso com "Desfazer" por alguns segundos.
-- Liberar o fechamento com alguma etapa ainda em branco pede confirmação.
-- A etapa atual (a primeira ainda não completa) fica destacada.
-
-O progresso conta cada nível como uma etapa (8 no total: os parciais e os
-100%, a folha e a liberação), igual a antes.
+Marcar uma etapa de 100% marca junto a parcial dela (80%, 60% ou 85/90%);
+desmarcar a parcial desmarca a de 100%. O progresso conta as etapas 2 a 9.
 
 backend/atualizar_base.py copia essa planilha para
 data/monitoramento_fechamento/resumo.xlsx e grava status.json. O portal lê o
