@@ -5,28 +5,39 @@ const ARQUIVO_DADOS = 'data/monitoramento_fechamento/resumo.xlsx';
 const ARQUIVO_STATUS = 'data/monitoramento_fechamento/status.json';
 let CLIENTES = [];
 
-// Etapas do checklist, na ordem da tela. O código é o que vai para o servidor:
-// nunca reaproveite nem mude o código de uma etapa (as marcações dependem dele).
-// Os códigos 0 a 5 foram da primeira versão e não devem ser usados.
+// Etapas do checklist. O código é o que vai para o servidor: nunca reaproveite
+// nem mude o código de uma etapa (as marcações dependem dele). Os códigos 0 a 5
+// foram da primeira versão e não devem ser usados.
 //  - semMovimento: conclui o cliente e trava as demais etapas.
-//  - parcial: marcar esta etapa marca junto a parcial dela;
-//    desmarcar a parcial desmarca esta.
+//  - nivel: rótulo curto do botão quando a etapa é um nível de um bloco.
 const ETAPAS = [
   { codigo: 10, nome: 'Empresa sem movimento', semMovimento: true },
-  { codigo: 11, nome: 'Recebimento da documentação contábil 100%', parcial: 12 },
-  { codigo: 12, nome: 'Recebimento da documentação contábil 80%', detalhe: 'Já é possível realizar o fechamento' },
+  { codigo: 11, nome: 'Recebimento da documentação contábil 100%', nivel: '100%' },
+  { codigo: 12, nome: 'Recebimento da documentação contábil 80%', nivel: '80%', detalhe: 'Já é possível realizar o fechamento' },
   { codigo: 13, nome: 'Conciliação da folha' },
-  { codigo: 14, nome: 'Conciliação do resumo fiscal 100%', parcial: 15 },
-  { codigo: 15, nome: 'Conciliação do fiscal 60% (ICMS)', detalhe: 'Falta PIS/Cofins' },
-  { codigo: 16, nome: 'Conciliação financeira 100%', parcial: 17 },
-  { codigo: 17, nome: 'Conciliação financeira 85/90%', detalhe: 'Já é possível enviar uma prévia' },
-  { codigo: 18, nome: 'Fechamento liberado' },
+  { codigo: 14, nome: 'Conciliação do resumo fiscal 100%', nivel: '100%' },
+  { codigo: 15, nome: 'Conciliação do fiscal 60% (ICMS)', nivel: '60% ICMS', detalhe: 'Falta PIS/Cofins' },
+  { codigo: 16, nome: 'Conciliação financeira 100%', nivel: '100%' },
+  { codigo: 17, nome: 'Conciliação financeira 85/90%', nivel: '85/90%', detalhe: 'Já é possível enviar uma prévia' },
+  { codigo: 18, nome: 'Fechamento liberado', liberacao: true },
 ];
 const ETAPA_SEM_MOVIMENTO = ETAPAS.find((e) => e.semMovimento);
 // As que contam no progresso (todas menos "sem movimento").
 const ETAPAS_TRABALHO = ETAPAS.filter((e) => !e.semMovimento);
 const TOTAL_ETAPAS = ETAPAS_TRABALHO.length;
 const porCodigo = (codigo) => ETAPAS.find((e) => e.codigo === codigo);
+
+// Blocos do checklist, na ordem da tela. Um bloco com mais de um nível é uma
+// escada: os níveis vão do parcial ao completo, e chegar a um nível marca os
+// de baixo e desmarca os de cima. A rosca e o progresso seguem contando cada
+// código (o parcial vale uma etapa e o completo, outra).
+const BLOCOS = [
+  { nome: 'Recebimento da documentação contábil', niveis: [12, 11] },
+  { nome: 'Conciliação da folha', niveis: [13] },
+  { nome: 'Conciliação fiscal', niveis: [15, 14] },
+  { nome: 'Conciliação financeira', niveis: [17, 16] },
+  { nome: 'Fechamento liberado', niveis: [18] },
+].map((b) => ({ ...b, niveis: b.niveis.map(porCodigo) }));
 
 // Coluna da planilha -> campo usado no portal
 const CAMPOS = {
@@ -91,12 +102,15 @@ function formatarQuando(iso) {
   return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) + ' às ' +
          d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 }
-function avisar(texto) {
+// Aviso no rodapé. Com "desfazer", ganha o botão e fica mais tempo na tela.
+function avisar(texto, desfazer) {
   const el = $('#aviso');
-  el.textContent = texto;
+  el.innerHTML = `<span>${escapeHTML(texto)}</span>` + (desfazer ? '<button type="button">Desfazer</button>' : '');
+  if (desfazer) el.querySelector('button').onclick = () => { el.classList.remove('visivel'); desfazer(); };
+  el.classList.toggle('com-acao', !!desfazer);
   el.classList.add('visivel');
   clearTimeout(avisar.t);
-  avisar.t = setTimeout(() => el.classList.remove('visivel'), 2200);
+  avisar.t = setTimeout(() => el.classList.remove('visivel'), desfazer ? 7000 : 2200);
 }
 function baixar(nome, conteudo, tipo) {
   const url = URL.createObjectURL(new Blob([conteudo], { type: tipo }));
@@ -167,58 +181,120 @@ function statusDe(id) {
   const f = feitasDe(id);
   return f === 0 ? 'pendente' : f === TOTAL_ETAPAS ? 'concluido' : 'andamento';
 }
-function proximaEtapa(id) {
+// Nível de um bloco: até onde ele chegou (0 = nada; niveis.length = completo).
+// Vale o nível mais alto marcado, mesmo que um de baixo tenha sido desmarcado
+// por outra pessoa ao mesmo tempo.
+function nivelDe(id, bloco) {
+  for (let n = bloco.niveis.length; n > 0; n--) if (marcada(id, bloco.niveis[n - 1])) return n;
+  return 0;
+}
+// Bloco atual: o primeiro, na ordem da tela, que ainda não está completo.
+function blocoAtual(id) {
   if (semMovimento(id)) return null;
-  return ETAPAS_TRABALHO.find((e) => !marcada(id, e)) || null;
+  return BLOCOS.find((b) => nivelDe(id, b) < b.niveis.length) || null;
+}
+const blocoDa = (etapa) => BLOCOS.find((b) => b.niveis.includes(etapa));
+// Blocos ainda sem nenhuma marcação (fora o próprio), para avisar antes de
+// liberar o fechamento.
+function blocosEmBranco(id, exceto) {
+  return BLOCOS.filter((b) => b !== exceto && nivelDe(id, b) === 0);
 }
 
-// Etapas que mudam junto com um clique: a de 100% leva a parcial ao ser
-// marcada; a parcial leva a de 100% ao ser desmarcada.
-function etapasAfetadas(id, etapa, marcar) {
-  const lista = [etapa];
-  if (marcar && etapa.parcial && !marcada(id, porCodigo(etapa.parcial))) lista.push(porCodigo(etapa.parcial));
-  if (!marcar) {
-    const completa = ETAPAS.find((e) => e.parcial === etapa.codigo);
-    if (completa && marcada(id, completa)) lista.push(completa);
-  }
-  return lista;
+// Mudanças ({código: marcar}) para levar um bloco ao nível n: marca os níveis
+// de baixo e desmarca os de cima.
+function mudancasParaNivel(id, bloco, n) {
+  const m = {};
+  bloco.niveis.forEach((e, i) => { if ((i < n) !== marcada(id, e)) m[e.codigo] = i < n; });
+  return m;
 }
 
-// A tela muda na hora; se o servidor recusar, as marcações voltam ao que eram.
-async function alternarEtapa(id, codigo) {
-  const etapa = porCodigo(codigo);
-  if (!etapa || (!etapa.semMovimento && semMovimento(id))) return;
+// Gravação no servidor. A tela muda na hora; as gravações vão em fila, na
+// ordem dos cliques (clicar rápido duas vezes não inverte o resultado), e se
+// o servidor recusar, as marcações voltam ao que eram.
+let filaGravacao = Promise.resolve();
+function gravar(id, mudancas) {
   const c = porId(id);
   const r = registro(id, true);
-  const marcar = !r.etapas[codigo];
-  const afetadas = etapasAfetadas(id, etapa, marcar);
-  const antes = Object.fromEntries(afetadas.map((e) => [e.codigo, r.etapas[e.codigo]]));
-  for (const e of afetadas) {
-    if (marcar) r.etapas[e.codigo] = new Date().toISOString();
-    else delete r.etapas[e.codigo];
+  const codigos = Object.keys(mudancas);
+  const antes = Object.fromEntries(codigos.map((k) => [k, r.etapas[k]]));
+  for (const k of codigos) {
+    if (mudancas[k]) r.etapas[k] = r.etapas[k] || new Date().toISOString();
+    else delete r.etapas[k];
   }
-
   gravacoesPendentes++;
-  try {
-    const respostas = await Promise.all(afetadas.map((e) => fetch(API + '/marcacao', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ grupo: chaveGrupo(c), etapa: e.codigo, feito: marcar }),
-    })));
-    if (respostas.some((resp) => !resp.ok)) throw new Error();
-    for (const resp of respostas) {
-      const dados = await resp.json();
-      if (marcar && dados.feitoEm) r.etapas[dados.etapa] = dados.feitoEm;
+  filaGravacao = filaGravacao.then(async () => {
+    try {
+      const respostas = await Promise.all(codigos.map((k) => fetch(API + '/marcacao', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ grupo: chaveGrupo(c), etapa: Number(k), feito: mudancas[k] }),
+      })));
+      if (respostas.some((resp) => !resp.ok)) throw new Error();
+      for (const resp of respostas) {
+        const dados = await resp.json();
+        // Só acerta a hora se a etapa continua marcada (outro clique pode ter vindo depois).
+        if (dados.feitoEm && r.etapas[dados.etapa]) r.etapas[dados.etapa] = dados.feitoEm;
+      }
+    } catch (e) {
+      for (const [k, v] of Object.entries(antes)) {
+        if (v) r.etapas[k] = v; else delete r.etapas[k];
+      }
+      avisar('Não foi possível salvar a marcação. Tente de novo.');
+    } finally {
+      gravacoesPendentes--;
+      atualizarTudo();
     }
-  } catch (e) {
-    for (const [k, v] of Object.entries(antes)) {
-      if (v) r.etapas[k] = v; else delete r.etapas[k];
-    }
-    avisar('Não foi possível salvar a marcação. Tente de novo.');
-  } finally {
-    gravacoesPendentes--;
-    atualizarTudo();
+  });
+}
+
+// Uma ação do usuário: grava e oferece "Desfazer". Sem login, um clique
+// errado vale para todos, então desfazer precisa estar à mão.
+function executar(id, mudancas, mensagem) {
+  if (!Object.keys(mudancas).length) return;
+  const inverso = Object.fromEntries(Object.entries(mudancas).map(([k, v]) => [k, !v]));
+  const c = porId(id);
+  const estavaConcluido = statusDe(id) === 'concluido';
+  gravar(id, mudancas);
+  if (!estavaConcluido && statusDe(id) === 'concluido') mensagem = c.grupo ? `Grupo ${c.grupo} concluído` : 'Cliente concluído';
+  const qtd = clientesDoGrupo(c).length;
+  if (qtd > 1) mensagem += ` · vale para os ${qtd} clientes do grupo`;
+  avisar(mensagem, () => { gravar(id, inverso); avisar('Marcação desfeita'); });
+  atualizarTudo();
+}
+
+// Leva um bloco ao nível n. Liberar o fechamento com blocos ainda em branco
+// pede confirmação na própria linha.
+let confirmandoLiberacao = null;
+function levarAoNivel(id, bloco, n, confirmado = false) {
+  if (semMovimento(id)) return;
+  if (bloco.niveis[0].liberacao && n > 0 && !confirmado && blocosEmBranco(id, bloco).length) {
+    confirmandoLiberacao = id;
+    renderTratamento();
+    return;
   }
+  confirmandoLiberacao = null;
+  const unico = bloco.niveis.length === 1;
+  const mensagem = n === 0 ? `${bloco.nome}: marcação retirada`
+    : unico ? (bloco.niveis[0].liberacao ? 'Fechamento liberado' : `${bloco.nome} concluída`)
+    : `${bloco.nome}: ${bloco.niveis[n - 1].nivel}`;
+  executar(id, mudancasParaNivel(id, bloco, n), mensagem);
+}
+// Clique num nível: leva o bloco até ele. Clicar no nível em que o bloco já
+// está desce um nível (num bloco de nível único, desmarca).
+function clicarNivel(id, bloco, codigo) {
+  const i = bloco.niveis.findIndex((e) => e.codigo === codigo) + 1;
+  levarAoNivel(id, bloco, nivelDe(id, bloco) === i ? i - 1 : i);
+}
+// Clique na linha (ou tecla do bloco): sobe um nível; do completo, volta ao zero.
+function avancarBloco(id, bloco) {
+  const n = nivelDe(id, bloco);
+  levarAoNivel(id, bloco, n === bloco.niveis.length ? 0 : n + 1);
+}
+function alternarSemMovimento(id) {
+  const marcar = !semMovimento(id);
+  confirmandoLiberacao = null;
+  executar(id, { [ETAPA_SEM_MOVIMENTO.codigo]: marcar },
+    marcar ? 'Empresa marcada sem movimento' : 'Empresa voltou a ter movimento');
 }
 
 // ── Rosca ──
@@ -377,7 +453,7 @@ function clientesDaTabela() {
       case 'id': return Number(c.id);
       case 'pct': return feitasDe(c.id);
       case 'regime': return rotuloRegime(c.regime);
-      case 'proxima': { const p = proximaEtapa(c.id); return p ? ETAPAS.indexOf(p) : ETAPAS.length; }
+      case 'proxima': { const b = blocoAtual(c.id); return b ? BLOCOS.indexOf(b) * 10 + nivelDe(c.id, b) : BLOCOS.length * 10; }
       default: return semAcento(c[ordem.campo]);
     }
   };
@@ -387,10 +463,13 @@ function clientesDaTabela() {
   });
 }
 
+// Primeiro bloco incompleto; se ele já tem um nível parcial, diz qual.
 function rotuloEtapaAtual(c) {
   if (semMovimento(c.id)) return 'Sem movimento';
-  const prox = proximaEtapa(c.id);
-  return prox ? prox.nome : ROTULO_STATUS.concluido;
+  const b = blocoAtual(c.id);
+  if (!b) return ROTULO_STATUS.concluido;
+  const n = nivelDe(c.id, b);
+  return n ? `${b.nome} (${b.niveis[n - 1].nivel} feito)` : b.nome;
 }
 
 function renderTabela() {
@@ -411,9 +490,10 @@ function renderTabela() {
     return;
   }
   $('#tabela-corpo').innerHTML = lista.map((c) => {
-    const f = feitasDe(c.id), p = pct(f, TOTAL_ETAPAS), st = statusDe(c.id), prox = proximaEtapa(c.id);
-    const etapaAtual = prox
-      ? escapeHTML(prox.nome)
+    const f = feitasDe(c.id), p = pct(f, TOTAL_ETAPAS), st = statusDe(c.id), atual = blocoAtual(c.id);
+    const nivel = atual ? nivelDe(c.id, atual) : 0;
+    const etapaAtual = atual
+      ? escapeHTML(atual.nome) + (nivel ? ` <span class="etiqueta etq-andamento">${escapeHTML(atual.niveis[nivel - 1].nivel)} feito</span>` : '')
       : `<span class="etiqueta etq-concluido">${escapeHTML(rotuloEtapaAtual(c))}</span>`;
     return `<tr data-id="${escapeHTML(c.id)}">
       <td class="num">${escapeHTML(c.id)}</td>
@@ -472,6 +552,7 @@ function abrirCliente(id, mudarEndereco = true) {
   const c = porId(id);
   if (!c) return;
   clienteAtual = c;
+  confirmandoLiberacao = null;
   $('#busca-cliente').value = rotuloCliente(c);
   fecharSugestoes();
   if (mudarEndereco) history.replaceState(null, '', '#tratamento/' + encodeURIComponent(c.id));
@@ -500,24 +581,65 @@ function renderTratamento() {
   $('#cli-info').innerHTML = info.filter(([, v]) => v)
     .map(([k, v]) => `<div><dt>${escapeHTML(k)}</dt><dd title="${escapeHTML(v)}">${escapeHTML(v)}</dd></div>`).join('');
 
+  const completos = BLOCOS.filter((b) => nivelDe(c.id, b) === b.niveis.length).length;
   $('#etapas-resumo').textContent = parado ? 'Empresa sem movimento'
-    : feitas === TOTAL_ETAPAS ? 'Todas concluídas' : plural(TOTAL_ETAPAS - feitas, 'etapa pendente', 'etapas pendentes');
-  $('#checklist').innerHTML = ETAPAS.map((e, i) => {
-    const quando = r?.etapas[e.codigo];
-    const fechada = parado && !e.semMovimento;
-    const classes = ['etapa', quando ? 'feita' : '', fechada ? 'fechada' : '', e.semMovimento ? 'sem-movimento' : ''].filter(Boolean).join(' ');
-    return `<button class="${classes}" data-etapa="${e.codigo}" aria-pressed="${!!quando}"${fechada ? ' disabled' : ''}>
-      <span class="etapa-num">${i + 1}</span>
-      <span class="etapa-caixa"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg></span>
-      <span class="etapa-nome">${escapeHTML(e.nome)}${e.detalhe ? `<small>${escapeHTML(e.detalhe)}</small>` : ''}</span>
-      <span class="etapa-quando">${quando ? 'Concluída em ' + formatarQuando(quando) : ''}</span>
-    </button>`;
-  }).join('');
+    : completos === BLOCOS.length ? 'Todas concluídas' : `${completos} de ${BLOCOS.length} completas`;
+  $('#checklist').innerHTML = htmlChecklist(c, r, parado);
   const qtdGrupo = clientesDoGrupo(c).length;
   $('#dica-grupo').textContent = (qtdGrupo > 1 ? `As etapas valem para os ${qtdGrupo} clientes do grupo ${c.grupo}. ` : '') +
-    `Atalho: teclas 1 a ${ETAPAS.length} marcam e desmarcam as etapas.`;
+    `Clique na linha para avançar a etapa ou no percentual para ir direto a ele. Atalhos: teclas 1 a ${BLOCOS.length}; 0 marca sem movimento.`;
 
   renderGrupo();
+}
+
+const ICONE_FEITO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg>';
+const ICONE_PARCIAL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round"><path d="M6 12h12"/></svg>';
+
+function htmlChecklist(c, r, parado) {
+  const quando = (e) => r?.etapas[e.codigo];
+  const atual = blocoAtual(c.id);
+  const sm = ETAPA_SEM_MOVIMENTO;
+  let html = `<button class="etapa sem-movimento${parado ? ' feita' : ''}" data-sem-movimento aria-pressed="${parado}">
+      <span class="etapa-num">0</span>
+      <span class="etapa-caixa">${ICONE_FEITO}</span>
+      <span class="etapa-nome">${escapeHTML(sm.nome)}<small>Conclui o cliente e trava as demais etapas</small></span>
+      <span></span>
+      <span class="etapa-quando">${parado ? 'Marcada em ' + formatarQuando(quando(sm)) : ''}</span>
+    </button>`;
+  if (parado) {
+    const guardadas = BLOCOS.filter((b) => nivelDe(c.id, b) > 0).length;
+    html += `<div class="aviso-travado">Etapas travadas enquanto a empresa estiver sem movimento.${guardadas ? ` ${guardadas === 1 ? 'A etapa já marcada fica guardada e volta' : `As ${guardadas} etapas já marcadas ficam guardadas e voltam`} a valer ao desmarcar.` : ''}</div>`;
+  }
+  html += BLOCOS.map((b, i) => {
+    const n = nivelDe(c.id, b), completo = n === b.niveis.length, ultimo = n ? b.niveis[n - 1] : null;
+    const eAtual = !parado && b === atual;
+    const classes = ['etapa', 'bloco', completo ? 'feita' : n ? 'parcial' : '', parado ? 'fechada' : '', eAtual ? 'atual' : ''].filter(Boolean).join(' ');
+    const detalhe = !completo && ultimo?.detalhe ? ultimo.detalhe : '';
+    const estado = parado || !ultimo ? ''
+      : `${completo ? (b.niveis[0].liberacao ? 'Liberado' : 'Concluída') : ultimo.nivel} em ${formatarQuando(quando(ultimo))}`;
+    const niveis = b.niveis.length > 1
+      ? `<span class="niveis">${b.niveis.map((e, j) =>
+          `<button type="button" class="nivel${j < n ? ' ativo' : ''}" data-etapa="${e.codigo}" aria-pressed="${j < n}"${parado ? ' disabled' : ''} title="${escapeHTML(e.nome)}">${escapeHTML(e.nivel)}</button>`).join('')}</span>`
+      : '<span></span>';
+    const tag = b.niveis.length > 1 ? 'div' : 'button';
+    const linha = `<${tag} class="${classes}" data-bloco="${i}"${tag === 'button' ? ` aria-pressed="${completo}"${parado ? ' disabled' : ''}` : ''}>
+      <span class="etapa-num">${i + 1}</span>
+      <span class="etapa-caixa">${completo ? ICONE_FEITO : n ? ICONE_PARCIAL : ''}</span>
+      <span class="etapa-nome">${escapeHTML(b.nome)}${eAtual ? '<em class="selo-atual">Etapa atual</em>' : ''}${detalhe ? `<small>${escapeHTML(detalhe)}</small>` : ''}</span>
+      ${niveis}
+      <span class="etapa-quando">${estado}</span>
+    </${tag}>`;
+    if (!b.niveis[0].liberacao || confirmandoLiberacao !== c.id || parado) return linha;
+    const faltam = blocosEmBranco(c.id, b).map((x) => x.nome);
+    return linha + `<div class="confirmacao">
+      <span>Ainda sem nenhuma marcação: ${escapeHTML(faltam.join(', '))}. Liberar o fechamento mesmo assim?</span>
+      <span class="confirmacao-botoes">
+        <button type="button" class="btn" data-confirmar-liberacao>Liberar mesmo assim</button>
+        <button type="button" class="btn btn-leve" data-cancelar-liberacao>Cancelar</button>
+      </span>
+    </div>`;
+  }).join('');
+  return html;
 }
 
 function renderGrupo() {
@@ -730,20 +852,26 @@ document.addEventListener('click', (e) => {
 
 // Tratamento: checklist e grupo
 $('#checklist').addEventListener('click', (e) => {
-  const b = e.target.closest('.etapa');
-  if (!b || !clienteAtual) return;
-  alternarEtapa(clienteAtual.id, Number(b.dataset.etapa));
-  renderTratamento();
-  if (statusDe(clienteAtual.id) === 'concluido') avisar(clienteAtual.grupo ? `Grupo ${clienteAtual.grupo} concluído` : 'Cliente concluído');
+  if (!clienteAtual) return;
+  const id = clienteAtual.id;
+  if (e.target.closest('[data-sem-movimento]')) return alternarSemMovimento(id);
+  const liberacao = BLOCOS.find((b) => b.niveis[0].liberacao);
+  if (e.target.closest('[data-confirmar-liberacao]')) return levarAoNivel(id, liberacao, 1, true);
+  if (e.target.closest('[data-cancelar-liberacao]')) { confirmandoLiberacao = null; return renderTratamento(); }
+  const linha = e.target.closest('.bloco');
+  if (!linha || linha.classList.contains('fechada')) return;
+  const bloco = BLOCOS[Number(linha.dataset.bloco)];
+  const nivel = e.target.closest('.nivel');
+  if (nivel) clicarNivel(id, bloco, Number(nivel.dataset.etapa));
+  else avancarBloco(id, bloco);
 });
 document.addEventListener('keydown', (e) => {
   if (!clienteAtual || !$('#tela-tratamento').classList.contains('visivel')) return;
-  if (e.target.closest('input, textarea, select') || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.target.closest?.('input, textarea, select') || e.ctrlKey || e.metaKey || e.altKey) return;
   const n = Number(e.key);
-  if (n >= 1 && n <= ETAPAS.length) {
-    alternarEtapa(clienteAtual.id, ETAPAS[n - 1].codigo);
-    renderTratamento();
-  }
+  if (e.key === '0') alternarSemMovimento(clienteAtual.id);
+  else if (n >= 1 && n <= BLOCOS.length && !semMovimento(clienteAtual.id)) avancarBloco(clienteAtual.id, BLOCOS[n - 1]);
+  else if (e.key === 'Escape' && confirmandoLiberacao) { confirmandoLiberacao = null; renderTratamento(); }
 });
 $('#btn-anterior').addEventListener('click', () => {
   const lista = clientesDoGrupo(clienteAtual), i = lista.findIndex((x) => x.id === clienteAtual.id);

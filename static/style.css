@@ -240,7 +240,8 @@ td.num { font-variant-numeric: tabular-nums; color: var(--cinza-texto); }
 
 .checklist { display: flex; flex-direction: column; gap: 6px; }
 .etapa {
-  display: grid; grid-template-columns: 28px 26px minmax(0, 1fr) auto; align-items: center; gap: 12px;
+  display: grid; grid-template-columns: 28px 26px minmax(0, 1fr) 170px 150px; align-items: center; gap: 12px;
+  cursor: pointer; color: inherit; font: inherit;
   width: 100%; text-align: left; padding: 12px 14px; border-radius: 6px;
   background: var(--bg-card-alt); border: 1px solid var(--borda); border-left: 4px solid var(--borda);
   transition: background 0.15s, border-color 0.15s;
@@ -253,7 +254,7 @@ td.num { font-variant-numeric: tabular-nums; color: var(--cinza-texto); }
 }
 .etapa-caixa svg { width: 14px; height: 14px; color: #fff; opacity: 0; transform: scale(.6); transition: opacity .15s, transform .15s; }
 .etapa-nome { font-weight: 600; font-size: 0.92rem; }
-.etapa-quando { font-size: 0.75rem; color: var(--cinza-muted); white-space: nowrap; }
+.etapa-quando { font-size: 0.75rem; color: var(--cinza-muted); white-space: nowrap; text-align: right; }
 .etapa.feita { background: var(--vermelho-suave); border-color: var(--vermelho-claro); border-left-color: var(--mg-vermelho); }
 .etapa.feita .etapa-caixa { background: var(--mg-vermelho); border-color: var(--mg-vermelho); }
 .etapa.feita .etapa-caixa svg { opacity: 1; transform: scale(1); }
@@ -264,6 +265,49 @@ td.num { font-variant-numeric: tabular-nums; color: var(--cinza-texto); }
 /* Com a empresa sem movimento, as demais ficam travadas */
 .etapa.fechada { opacity: 0.45; cursor: not-allowed; }
 .etapa.fechada:hover { border-color: var(--borda); }
+.aviso-travado {
+  font-size: 0.8rem; color: var(--mg-vermelho); background: var(--vermelho-suave);
+  border-radius: 6px; padding: 8px 12px; margin-bottom: 4px;
+}
+
+/* Bloco parcial: caixa com traço, borda em vermelho claro */
+.etapa.parcial { border-left-color: var(--vermelho-claro); }
+.etapa.parcial .etapa-caixa { background: var(--vermelho-claro); border-color: var(--vermelho-claro); }
+.etapa.parcial .etapa-caixa svg { opacity: 1; transform: scale(1); }
+.etapa.parcial .etapa-num { color: var(--vermelho-claro); }
+/* Próxima etapa a trabalhar */
+.etapa.atual:not(.parcial) { border-left-color: var(--mg-vermelho); }
+.selo-atual {
+  display: inline-block; margin-left: 8px; vertical-align: 1px;
+  font-style: normal; font-size: 0.66rem; font-weight: 700; letter-spacing: 0.4px; text-transform: uppercase;
+  color: var(--mg-vermelho); border: 1px solid var(--vermelho-claro); border-radius: 999px; padding: 0 7px;
+}
+/* Níveis (80% / 100%): botões encostados; os alcançados ficam preenchidos */
+.niveis { display: inline-flex; justify-self: end; }
+.nivel {
+  font-size: 0.78rem; font-weight: 700; padding: 4px 12px; min-width: 64px;
+  background: var(--bg-card); color: var(--cinza-texto); border: 1.5px solid var(--borda);
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.nivel + .nivel { margin-left: -1.5px; }
+.nivel:first-child { border-radius: 4px 0 0 4px; }
+.nivel:last-child { border-radius: 0 4px 4px 0; }
+.nivel:hover:not(:disabled) { border-color: var(--mg-vermelho); color: var(--mg-vermelho); position: relative; }
+.nivel.ativo { background: var(--mg-vermelho); border-color: var(--mg-vermelho); color: #fff; }
+.nivel.ativo:hover:not(:disabled) { color: #fff; background: var(--mg-vermelho-escuro); }
+.nivel:disabled { cursor: not-allowed; }
+
+/* Confirmação de "Fechamento liberado" com etapas em branco */
+.confirmacao {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin: -2px 0 4px; padding: 10px 14px; border-radius: 0 0 6px 6px;
+  background: var(--vermelho-suave); border: 1px solid var(--vermelho-claro); border-top: 0;
+  font-size: 0.84rem;
+}
+.confirmacao > span:first-child { flex: 1 1 280px; }
+.confirmacao-botoes { display: flex; gap: 6px; }
+.btn-leve { border-color: var(--borda); color: var(--cinza-texto); }
+.btn-leve:hover:not(:disabled) { background: var(--trilha); color: var(--cinza-escuro); }
 .dica { font-size: 0.75rem; color: var(--cinza-muted); margin-top: 10px; }
 
 
@@ -294,6 +338,13 @@ td.num { font-variant-numeric: tabular-nums; color: var(--cinza-texto); }
   transition: opacity .2s, transform .2s;
 }
 .aviso.visivel { opacity: 1; transform: translate(-50%, 0); }
+.aviso.com-acao.visivel { pointer-events: auto; }
+.aviso { display: flex; align-items: center; gap: 14px; max-width: calc(100vw - 32px); }
+.aviso button {
+  background: none; border: 0; padding: 2px 4px; color: var(--vermelho-claro);
+  font-weight: 800; text-transform: uppercase; font-size: 0.78rem; letter-spacing: 0.4px; white-space: nowrap;
+}
+.aviso button:hover { text-decoration: underline; }
 
 @media (max-width: 1100px) {
   .kpis { grid-template-columns: 1fr 1fr; }
@@ -304,6 +355,8 @@ td.num { font-variant-numeric: tabular-nums; color: var(--cinza-texto); }
   .topo, .tela { padding-left: 16px; padding-right: 16px; }
   .kpis { grid-template-columns: 1fr; }
   .painel-rosca { grid-template-columns: 1fr; justify-items: center; }
+  .etapa { grid-template-columns: 22px 26px minmax(0, 1fr); }
+  .etapa .niveis, .etapa-quando { grid-column: 3; justify-self: start; text-align: left; }
   .marca-sub { display: none; }
 }
 @media print {

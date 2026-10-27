@@ -74,14 +74,18 @@ Definidas em `ETAPAS` no `script.js` (pedido da coordenação, 2026-10-22), nest
 - **O código é o que vai para o servidor.** Nunca mude nem reaproveite um código. Os códigos 0 a 5 foram da primeira lista (Cobrança, Recebimento, Conciliação Financeira, Folha, Fiscal, Importar Fechamento) e ficam ignorados.
 - Renomear uma etapa ou mudar a ordem na tela é seguro (a marcação segue o código). Etapa nova ganha código novo (19, 20...). O servidor aceita códigos de 0 a 49.
 - **Empresa sem movimento** (`semMovimento`): marcada, o cliente conta como concluído, as demais etapas ficam travadas (`.etapa.fechada`) e contam como feitas nos placares. As marcações delas ficam guardadas e voltam a valer ao desmarcar.
-- **Parciais** (`parcial`): marcar a de 100% marca a parcial junto; desmarcar a parcial desmarca a de 100% (`etapasAfetadas()`). Cada uma é uma gravação separada no servidor.
-- O progresso conta as 8 etapas de trabalho (`TOTAL_ETAPAS`), sem a "sem movimento".
+- **Blocos** (`BLOCOS`): a tela mostra 5 etapas de trabalho. Documentação, fiscal e financeira são escadas de dois níveis (parcial e 100%, códigos `[parcial, completo]`). Chegar a um nível marca os de baixo e desmarca os de cima (`mudancasParaNivel()`); o nível do bloco é o mais alto marcado (`nivelDe()`). Clique na linha sobe um nível e do completo volta a zero (`avancarBloco()`); clique no percentual vai direto a ele, e no percentual atual desce um (`clicarNivel()`). Cada código é uma gravação separada no servidor.
+- **Gravação:** `executar()` grava (`gravar()`, em fila na ordem dos cliques, com volta atrás se o servidor recusar) e mostra o aviso com **Desfazer**, que grava o inverso. Sem login, desfazer é a proteção contra clique errado.
+- **Fechamento liberado** com algum bloco ainda em branco pede confirmação na própria linha (`confirmandoLiberacao`). Não bloqueia: só avisa.
+- **Etapa atual** (`blocoAtual()`): o primeiro bloco incompleto; aparece destacado no checklist e na coluna "Etapa atual" da tabela, com o nível parcial já feito.
+- Atalhos: teclas 1 a 5 = clique na linha do bloco; 0 = sem movimento.
+- O progresso conta os 8 códigos de trabalho (`TOTAL_ETAPAS`: cada nível vale uma etapa), sem a "sem movimento". A rosca tem 8 segmentos; o resumo do checklist conta blocos completos ("2 de 5 completas").
 
 ## Regras de negócio
 
 - **O progresso é do grupo, não do cliente.** Uma etapa marcada vale para todos os clientes do mesmo `Grupo` (`chaveGrupo()`). Cliente sem grupo tem o próprio registro.
 - Situação do cliente: nenhuma etapa = Não iniciado; as 8 de trabalho ou "sem movimento" = Concluído; o resto = Em andamento. As abas da tabela e os placares usam a mesma `statusDe()`.
-- "Etapa atual" na tabela é a primeira etapa de trabalho ainda não marcada, na ordem da tela ("Sem movimento" quando for o caso).
+- "Etapa atual" na tabela é o primeiro bloco ainda não completo, com o nível parcial já feito entre parênteses ("Sem movimento" quando for o caso).
 - Não existe competência (mês). As marcações valem até alguém desmarcar.
 
 ## Armadilhas
