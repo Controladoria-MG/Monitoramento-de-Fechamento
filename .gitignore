@@ -9,6 +9,3 @@ venv/
 data/monitoramento_fechamento/*.xlsx
 # ...exceto a planilha única que o portal lê (fetch + SheetJS).
 !data/monitoramento_fechamento/resumo.xlsx
-
-# O script de atualização roda só localmente, como nos outros portais.
-backend/

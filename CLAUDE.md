@@ -1,6 +1,6 @@
 # CLAUDE.md — Monitoramento de Fechamento
 
-Checklist das etapas de fechamento contábil por cliente, com placares por coordenação, tributação e etapa. Publicado no GitHub Pages (`Controladoria-MG/Monitoramento-de-Fechamento`) e listado na Central de Relatórios.
+Checklist das etapas de fechamento contábil por cliente, com placares por coordenação, tributação e etapa. **Piloto**, entregue ao TI em 2026-10-27 para a versão definitiva (ver `README.md`, que é o documento de entrega). O piloto segue no GitHub Pages (`Controladoria-MG/Monitoramento-de-Fechamento`), listado na Central de Relatórios.
 
 O projeto se chamava **Radar Contábil** até 2026-10-26 e, por um dia, **Trilha de Fechamento**. O nome antigo continua só no que ninguém vê: as rotas `/api/radar-contabil` e a tabela `radar_contabil_etapas` no servidor do Quadro (renomear ali exigiria migrar o banco).
 
@@ -9,10 +9,9 @@ O projeto se chamava **Radar Contábil** até 2026-10-26 e, por um dia, **Trilha
 ```
 Raiz/
 ├── index.html
-├── .gitignore
+├── README.md            (entrega ao TI: o que é, como rodar, o que falta)
 ├── CLAUDE.md
-├── documentacao.txt
-├── requirements.txt
+├── .gitignore
 ├── static/
 │   ├── script.js
 │   ├── style.css
@@ -21,8 +20,14 @@ Raiz/
 │   └── monitoramento_fechamento/
 │       ├── resumo.xlsx   (a base que o portal lê)
 │       └── status.json   (data da última atualização)
-└── backend/
-    └── atualizar_base.py (só local, fora do repositório)
+├── servidor/            (versão definitiva: tela + marcações num serviço só)
+│   ├── app.py
+│   ├── schema.sql
+│   ├── importar_piloto.py
+│   └── requirements.txt
+└── scripts/
+    ├── atualizar_base.py (copia a planilha para data/; uso no piloto)
+    └── requirements.txt
 ```
 
 ## Regras — OBRIGATÓRIO SEGUIR
@@ -43,17 +48,22 @@ Raiz/
 - A aba `etapas` da planilha **não é mais usada**: as etapas ficam fixas em `ETAPAS` no `script.js` (ver "Etapas do checklist").
 - O portal lê com `fetch` + SheetJS (`carregarDados()`). Por isso precisa de servidor: `file://` bloqueia o fetch.
 
-### Backend (`backend/`)
+### Servidor (`servidor/`)
+- `app.py` (FastAPI + PostgreSQL, `DATABASE_URL`): entrega `index.html`, `static/` e `data/` e expõe `GET /api/fechamento/progresso` e `PUT /api/fechamento/marcacao`, mesmo formato das rotas do piloto no Quadro. Tabela `fechamento_etapas` (`schema.sql`, criada na subida), com `feito_em` em `TIMESTAMPTZ`.
+- `importar_piloto.py`: copia as marcações do Quadro para o banco novo (idempotente; ignora os códigos 0 a 5).
+- Mantenha as rotas do Quadro e as do `servidor/` com o mesmo contrato: o mesmo `script.js` serve os dois.
+
+### Scripts (`scripts/`)
 - `atualizar_base.py`: copia a planilha para `data/monitoramento_fechamento/resumo.xlsx`, confere a aba `Clientes` e grava `status.json`. Com `--publicar`, faz commit e push só desses dois arquivos.
 - Funciona com a planilha aberta no Excel: o Python não abre o arquivo travado, então a cópia é feita pelo `Copy-Item` do PowerShell.
 
 ### Marcações (compartilhadas)
-- As etapas marcadas ficam no **servidor do Quadro** (WJ-Quadro, Render), tabela `radar_contabil_etapas` (grupo, etapa, feito_em), para todos verem o mesmo progresso.
-- API (`API_PADRAO` no `script.js`): `GET https://wj-quadro.onrender.com/api/radar-contabil/progresso` devolve `{grupos: {"g:<grupo>": {etapas: {"0": iso, ...}}}}`; `PUT .../marcacao` com `{grupo, etapa, feito}` marca ou desmarca. O código das rotas está no `backend/main.py` do repositório WJ-Quadro, seção "ROTAS — RADAR CONTÁBIL".
+- As etapas marcadas ficam no servidor, para todos verem o mesmo progresso. A tela escolhe sozinha (`API_PADRAO`): no `github.io` usa o **Quadro** (piloto: WJ-Quadro no Render, tabela `radar_contabil_etapas`); em qualquer outro endereço usa `api/fechamento` no próprio endereço (`servidor/app.py`).
+- API do piloto: `GET https://wj-quadro.onrender.com/api/radar-contabil/progresso` devolve `{grupos: {"g:<grupo>": {etapas: {"0": iso, ...}}}}`; `PUT .../marcacao` com `{grupo, etapa, feito}` marca ou desmarca. O código das rotas está no `backend/main.py` do repositório WJ-Quadro, seção "ROTAS — MONITORAMENTO DE FECHAMENTO".
 - O clique muda a tela na hora e grava em seguida; se o servidor recusar, a marcação volta e aparece um aviso. A cada 20 s a tela busca o que os outros marcaram (`atualizarEmSegundoPlano`).
 - Não há login: qualquer pessoa com o endereço marca e desmarca. Por isso não existe "limpar todas as marcações".
 - No navegador (`localStorage`, chave `monitoramento-de-fechamento:preferencias`) fica só o tema.
-- Para testar com um Quadro local: `http://localhost:8794/?api=http://127.0.0.1:8000/api/radar-contabil` (o parâmetro `api` só vale em localhost).
+- Para testar contra outro servidor: `?api=<endereço da API>` (só vale em localhost).
 
 ## Etapas do checklist
 
@@ -92,11 +102,15 @@ Definidas em `ETAPAS` no `script.js` (pedido da coordenação, 2026-10-22), nest
 
 ## Como rodar
 
+Versão definitiva (tela + marcações), a partir da raiz:
 ```
-cd Monitoramento-de-Fechamento
-python backend/atualizar_base.py
-python -m http.server 8794
+pip install -r servidor/requirements.txt
+DATABASE_URL=postgresql://... uvicorn servidor.app:app --port 8000
 ```
-Acessar `http://localhost:8794`.
+Acessar `http://localhost:8000`. Para testar, use um banco de teste, nunca o do Quadro.
 
-Publicar a base nova: `python backend/atualizar_base.py --publicar`.
+Piloto (base nova da planilha):
+```
+python scripts/atualizar_base.py             # só atualiza data/
+python scripts/atualizar_base.py --publicar  # atualiza e publica no GitHub Pages
+```
